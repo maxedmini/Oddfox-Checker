@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OddFox Checker - QR Code Generator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+      margin: 0;
+      padding: 40px 20px;
+      min-height: 100vh;
+      color: white;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      color: #1e293b;
+    }
+    h1 {
+      text-align: center;
+      color: #D85B28;
+      margin: 0 0 10px;
+      font-size: 32px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #64748b;
+      margin-bottom: 40px;
+      font-size: 14px;
+    }
+    .qr-section {
+      text-align: center;
+      margin: 30px 0;
+      padding: 30px;
+      background: #f8fafc;
+      border-radius: 12px;
+      border: 2px dashed #D85B28;
+    }
+    #qrcode {
+      display: inline-block;
+      padding: 20px;
+      background: white;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    .url-box {
+      background: #1e293b;
+      color: white;
+      padding: 15px 20px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 14px;
+      margin: 20px 0;
+      word-break: break-all;
+      text-align: center;
+    }
+    button {
+      background: linear-gradient(135deg, #D85B28 0%, #E67E22 100%);
+      color: white;
+      border: none;
+      padding: 14px 32px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 10px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(216, 91, 40, 0.4);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    .input-group {
+      margin: 20px 0;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #475569;
+    }
+    input {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 15px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    input:focus {
+      outline: none;
+      border-color: #D85B28;
+      box-shadow: 0 0 0 3px rgba(216, 91, 40, 0.1);
+    }
+    .info {
+      background: #e0f2fe;
+      border-left: 4px solid #0284c7;
+      padding: 15px;
+      border-radius: 6px;
+      margin: 20px 0;
+      font-size: 14px;
+    }
+    .buttons {
+      text-align: center;
+      margin-top: 30px;
+    }
+    select {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 15px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      background: white;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎯 OddFox Checker QR Code</h1>
+    <div class="subtitle">Generate QR codes for easy sharing at competitions</div>
+
+    <div class="input-group">
+      <label for="urlInput">📍 Website URL</label>
+      <input type="text" id="urlInput" value="https://maxedmini.github.io/Oddfox-Checker/" placeholder="Enter your GitHub Pages URL">
+    </div>
+
+    <div class="input-group">
+      <label for="sizeSelect">📏 QR Code Size</label>
+      <select id="sizeSelect">
+        <option value="200">Small (200x200) - For screens</option>
+        <option value="400" selected>Medium (400x400) - For posters</option>
+        <option value="600">Large (600x600) - For banners</option>
+        <option value="1000">Extra Large (1000x1000) - For printing</option>
+      </select>
+    </div>
+
+    <div class="buttons">
+      <button onclick="generateQR()">🔄 Generate QR Code</button>
+    </div>
+
+    <div class="qr-section" id="qrSection" style="display: none;">
+      <h3 style="margin-top: 0;">✅ Your QR Code</h3>
+      <div id="qrcode"></div>
+      <div class="url-box" id="displayUrl"></div>
+      <div class="buttons">
+        <button onclick="downloadQR()">💾 Download QR Code</button>
+        <button onclick="copyURL()">📋 Copy URL</button>
+        <button onclick="printPoster()">🖨️ Print Poster</button>
+      </div>
+    </div>
+
+    <div class="info">
+      <strong>💡 How to use:</strong><br>
+      1. Update the URL above if using a custom domain<br>
+      2. Choose your preferred QR code size<br>
+      3. Click "Generate QR Code"<br>
+      4. Download or print for competition use!
+    </div>
+
+    <div class="info" style="background: #fef3c7; border-color: #f59e0b;">
+      <strong>📱 Users scan the QR code →</strong><br>
+      They can instantly open and install the app on their phone!
+    </div>
+  </div>
+
+  <script>
+    let currentQRUrl = '';
+
+    function generateQR() {
+      const url = document.getElementById('urlInput').value.trim();
+      const size = document.getElementById('sizeSelect').value;
+
+      if (!url) {
+        alert('Please enter a URL');
+        return;
+      }
+
+      // Using QR Server API (free, no registration needed)
+      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}`;
+
+      currentQRUrl = qrApiUrl;
+
+      // Display QR code
+      const qrDiv = document.getElementById('qrcode');
+      qrDiv.innerHTML = `<img src="${qrApiUrl}" alt="QR Code" style="max-width: 100%; height: auto;">`;
+
+      // Display URL
+      document.getElementById('displayUrl').textContent = url;
+
+      // Show section
+      document.getElementById('qrSection').style.display = 'block';
+
+      // Scroll to QR code
+      document.getElementById('qrSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function downloadQR() {
+      if (!currentQRUrl) {
+        alert('Please generate a QR code first');
+        return;
+      }
+
+      // Create a link and trigger download
+      const link = document.createElement('a');
+      link.href = currentQRUrl;
+      link.download = 'oddfox-checker-qr-code.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      alert('✅ QR Code downloaded! Check your Downloads folder.');
+    }
+
+    function copyURL() {
+      const url = document.getElementById('urlInput').value;
+      navigator.clipboard.writeText(url).then(() => {
+        alert('✅ URL copied to clipboard!');
+      }).catch(() => {
+        // Fallback
+        const temp = document.createElement('textarea');
+        temp.value = url;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+        alert('✅ URL copied to clipboard!');
+      });
+    }
+
+    function printPoster() {
+      if (!currentQRUrl) {
+        alert('Please generate a QR code first');
+        return;
+      }
+
+      const url = document.getElementById('urlInput').value;
+
+      // Create printable poster
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>OddFox Checker - Scan to Install</title>
+          <style>
+            @page { margin: 1cm; }
+            body {
+              font-family: Arial, sans-serif;
+              text-align: center;
+              padding: 40px;
+            }
+            h1 {
+              color: #D85B28;
+              font-size: 48px;
+              margin: 20px 0;
+            }
+            .subtitle {
+              font-size: 24px;
+              color: #666;
+              margin: 20px 0;
+            }
+            .qr-container {
+              margin: 40px 0;
+              padding: 30px;
+              border: 4px dashed #D85B28;
+              display: inline-block;
+            }
+            .instructions {
+              font-size: 20px;
+              margin: 30px 0;
+              line-height: 1.6;
+            }
+            .url {
+              font-size: 16px;
+              color: #666;
+              font-family: monospace;
+              margin: 20px 0;
+            }
+            .footer {
+              margin-top: 60px;
+              font-size: 14px;
+              color: #999;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>📱 ELIGIBILITY CHECKER</h1>
+          <div class="subtitle">Scan to Install the OddFox App</div>
+
+          <div class="qr-container">
+            <img src="${currentQRUrl}" style="width: 400px; height: 400px;">
+          </div>
+
+          <div class="instructions">
+            <strong>📱 How to Install:</strong><br><br>
+            1. Open camera on your phone<br>
+            2. Point at QR code above<br>
+            3. Tap the notification<br>
+            4. Click "Add to Home Screen"<br><br>
+            ✅ Works offline after installation!
+          </div>
+
+          <div class="url">${url}</div>
+
+          <div class="footer">
+            OddFox Eligibility Checker • JJIF Competition Tool
+          </div>
+        </body>
+        </html>
+      `);
+
+      printWindow.document.close();
+
+      // Auto-print after a short delay
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    }
+
+    // Auto-generate on page load
+    window.addEventListener('load', () => {
+      generateQR();
+    });
+  </script>
+</body>
+</html>
