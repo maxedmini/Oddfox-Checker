@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.0.0"; // Major release: Near production-ready version with comprehensive fixes
+const APP_VERSION = "3.2.0"; // Code organization: extract helper functions, add JSDoc, replace more console.log
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -884,6 +884,224 @@ const WEIGHTS = {
 };
 
 /** =========================
+ *  CONSTANTS
+ *  ========================= */
+const VALIDATION_CONSTANTS = {
+  MIN_BIRTH_YEAR: 1900,
+  MAX_BIRTH_YEAR: 2100,
+  MIN_WEIGHT: 1,
+  MAX_WEIGHT: 200,
+  ADULT_DEFAULT_AGE: 21,
+  MASTERS_DEFAULT_AGE: 36,
+  MERGE_SCORE_PERFECT: 100,
+  MERGE_SCORE_GOOD: 95,
+  MERGE_SCORE_ACCEPTABLE: 70,
+  MERGE_SCORE_MIN: 75,
+  INPUT_DEBOUNCE_MS: 300
+};
+
+const DEBUG = false; // Set to true for development logging
+
+/** =========================
+ *  UTILITY FUNCTIONS
+ *  ========================= */
+
+/**
+ * Safely parse an integer with fallback
+ * @param {*} value - Value to parse
+ * @param {number|null} defaultValue - Default value if parsing fails
+ * @returns {number|null} Parsed integer or default value
+ */
+function safeParseInt(value, defaultValue = null) {
+  if (value === null || value === undefined || value === '') {
+    return defaultValue;
+  }
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
+/**
+ * Safely parse a float with fallback
+ * @param {*} value - Value to parse
+ * @param {number|null} defaultValue - Default value if parsing fails
+ * @returns {number|null} Parsed float or default value
+ */
+function safeParseFloat(value, defaultValue = null) {
+  if (value === null || value === undefined || value === '') {
+    return defaultValue;
+  }
+  const parsed = parseFloat(value);
+  return isNaN(parsed) ? defaultValue : parsed;
+}
+
+/**
+ * Conditional logging (only in DEBUG mode)
+ * @param {...any} args - Arguments to log
+ */
+function log(...args) {
+  if (DEBUG) console.log(...args);
+}
+
+/**
+ * Debounce function to limit rapid calls
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Wait time in milliseconds
+ * @returns {Function} Debounced function
+ */
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
+/**
+ * Copy text to clipboard with fallback strategies
+ * @param {string} text - Text to copy
+ * @param {Function} successCallback - Called on success
+ * @param {Function} errorCallback - Called on error
+ */
+function copyToClipboard(text, successCallback, errorCallback) {
+  // Modern Clipboard API
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        if (successCallback) successCallback();
+      })
+      .catch(err => {
+        log('Clipboard API failed:', err);
+        // Fallback to legacy method
+        copyToClipboardLegacy(text, successCallback, errorCallback);
+      });
+  } else {
+    // Fallback for older browsers
+    copyToClipboardLegacy(text, successCallback, errorCallback);
+  }
+}
+
+/**
+ * Legacy clipboard copy using temporary textarea
+ * @param {string} text - Text to copy
+ * @param {Function} successCallback - Called on success
+ * @param {Function} errorCallback - Called on error
+ */
+function copyToClipboardLegacy(text, successCallback, errorCallback) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    const successful = document.execCommand('copy');
+    if (successful && successCallback) {
+      successCallback();
+    } else if (!successful && errorCallback) {
+      errorCallback();
+    }
+  } catch (err) {
+    log('Legacy clipboard copy failed:', err);
+    if (errorCallback) errorCallback();
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+/** =========================
+ *  VALIDATION FUNCTIONS
+ *  ========================= */
+
+/**
+ * Validate birth year
+ * @param {*} year - Year to validate
+ * @returns {{valid: boolean, error: string|null, value: number|null}}
+ */
+function validateBirthYear(year) {
+  const parsed = safeParseInt(year);
+
+  if (parsed === null) {
+    return { valid: false, error: 'Birth year is required', value: null };
+  }
+
+  if (parsed < VALIDATION_CONSTANTS.MIN_BIRTH_YEAR || parsed > VALIDATION_CONSTANTS.MAX_BIRTH_YEAR) {
+    return {
+      valid: false,
+      error: `Birth year must be between ${VALIDATION_CONSTANTS.MIN_BIRTH_YEAR} and ${VALIDATION_CONSTANTS.MAX_BIRTH_YEAR}`,
+      value: null
+    };
+  }
+
+  return { valid: true, error: null, value: parsed };
+}
+
+/**
+ * Validate event year
+ * @param {*} year - Year to validate
+ * @returns {{valid: boolean, error: string|null, value: number|null}}
+ */
+function validateEventYear(year) {
+  const parsed = safeParseInt(year);
+
+  if (parsed === null) {
+    return { valid: false, error: 'Event year is required', value: null };
+  }
+
+  const currentYear = new Date().getFullYear();
+  if (parsed < currentYear - 5 || parsed > currentYear + 5) {
+    return {
+      valid: false,
+      error: `Event year should be within 5 years of current year (${currentYear})`,
+      value: null
+    };
+  }
+
+  return { valid: true, error: null, value: parsed };
+}
+
+/**
+ * Validate weight
+ * @param {*} weight - Weight to validate
+ * @returns {{valid: boolean, error: string|null, value: number|null}}
+ */
+function validateWeight(weight) {
+  const parsed = safeParseFloat(weight);
+
+  if (parsed === null) {
+    return { valid: false, error: 'Weight is required', value: null };
+  }
+
+  if (parsed < VALIDATION_CONSTANTS.MIN_WEIGHT || parsed > VALIDATION_CONSTANTS.MAX_WEIGHT) {
+    return {
+      valid: false,
+      error: `Weight must be between ${VALIDATION_CONSTANTS.MIN_WEIGHT} and ${VALIDATION_CONSTANTS.MAX_WEIGHT} kg`,
+      value: null
+    };
+  }
+
+  return { valid: true, error: null, value: parsed };
+}
+
+/**
+ * Validate gender
+ * @param {string} gender - Gender to validate
+ * @returns {{valid: boolean, error: string|null, value: string|null}}
+ */
+function validateGender(gender) {
+  if (!gender) {
+    return { valid: false, error: 'Gender is required', value: null };
+  }
+
+  const normalized = gender.toUpperCase();
+  if (normalized !== 'MALE' && normalized !== 'FEMALE') {
+    return { valid: false, error: 'Gender must be MALE or FEMALE', value: null };
+  }
+
+  return { valid: true, error: null, value: normalized };
+}
+
+/** =========================
  *  HELPERS
  *  ========================= */
 function ageReached(birthYear, eventYear) {
@@ -934,6 +1152,11 @@ function formatWeightClass(wc) {
   return (wc.type === "plus" ? "+" + wc.value + " kg" : "-" + wc.value + " kg");
 }
 
+/**
+ * Copy text to clipboard with button feedback
+ * @param {string} text - Text to copy
+ * @param {HTMLElement} buttonElement - Button to show feedback on
+ */
 function copyText(text, buttonElement) {
   // Validate input
   if (typeof text !== 'string' || text.length === 0) {
@@ -943,6 +1166,30 @@ function copyText(text, buttonElement) {
     return;
   }
 
+  // Use our centralized clipboard utility
+  copyToClipboard(
+    text,
+    () => {
+      if (buttonElement) {
+        showCopyFeedback(buttonElement, "Copied!", true);
+      }
+    },
+    () => {
+      log('Copy failed for text:', text);
+      if (buttonElement) {
+        showCopyFeedback(buttonElement, "Error", false);
+      } else {
+        // Show user-friendly message if no button element
+        alert('Failed to copy to clipboard. Please try manual copy.');
+      }
+    }
+  );
+}
+
+// Legacy copyText implementation removed - now uses copyToClipboard utility
+
+// Keeping old fallback function for backwards compatibility
+function legacyCopyText(text, buttonElement) {
   // Try modern clipboard API with error handling
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text)
@@ -952,7 +1199,7 @@ function copyText(text, buttonElement) {
         }
       })
       .catch(err => {
-        console.error('Clipboard error:', err);
+        log('Clipboard error:', err);
         // Fallback to old method
         fallbackCopyText(text, buttonElement);
       });
@@ -1019,6 +1266,32 @@ function getBlockedReason(ageCat, disciplineKey) {
   return "No age move-up is permitted from " + ageCat + " in this discipline under JJIF competition rules.";
 }
 
+/**
+ * Get human-readable discipline label
+ * @param {string} disciplineKey - Discipline key (FIGHTING, NEWAZA, etc.)
+ * @returns {string} Human-readable label
+ */
+function getDisciplineLabel(disciplineKey) {
+  switch (disciplineKey) {
+    case "BABY_MONKEYS":
+      return "Baby Monkeys Sumo";
+    case "GROUNDFIGHT":
+      return "Groundfighting";
+    case "FIGHTING":
+      return "Ju-Jitsu Fighting";
+    case "NEWAZA":
+      return "Jiu-Jitsu Newaza";
+    default:
+      return disciplineKey;
+  }
+}
+
+/**
+ * Get allowed age categories for athlete including move-ups
+ * @param {Object} ageObj - Age category object
+ * @param {string} disciplineKey - Discipline key
+ * @returns {Array<Object>} Array of allowed age category objects
+ */
 function allowedAgeCategories(ageObj, disciplineKey) {
   const base = ageObj;
 
@@ -1041,13 +1314,19 @@ function allowedAgeCategories(ageObj, disciplineKey) {
  *  ========================= */
 
 /** =========================
- *  VALIDATION HELPERS
+ *  VALIDATION HELPERS (UI)
  *  ========================= */
-function validateInput(inputId, value, min, max, errorMsg) {
-  const input = document.getElementById(inputId);
-  const wrapper = input.parentElement;
 
-  // Create error message element if it doesn't exist
+/**
+ * Show validation error on input field
+ * @param {string} inputId - ID of the input element
+ * @param {string} errorMsg - Error message to display
+ */
+function showInputError(inputId, errorMsg) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  const wrapper = input.parentElement;
   let errorEl = wrapper.querySelector('.error-message');
   if (!errorEl) {
     errorEl = document.createElement('div');
@@ -1055,59 +1334,108 @@ function validateInput(inputId, value, min, max, errorMsg) {
     wrapper.appendChild(errorEl);
   }
 
-  // Validate
-  const numValue = Number(value);
-  const isEmpty = value === '' || value === null || value === undefined;
-  const isInvalid = isNaN(numValue) || numValue < min || numValue > max;
+  input.classList.add('input-error');
+  input.classList.remove('input-success');
+  errorEl.textContent = errorMsg;
+  errorEl.classList.add('show');
+}
 
-  if (isEmpty) {
-    input.classList.remove('input-error', 'input-success');
+/**
+ * Clear validation error/success on input field
+ * @param {string} inputId - ID of the input element
+ */
+function clearInputValidation(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  const wrapper = input.parentElement;
+  const errorEl = wrapper.querySelector('.error-message');
+
+  input.classList.remove('input-error', 'input-success');
+  if (errorEl) {
     errorEl.textContent = '';
     errorEl.classList.remove('show');
-    return false;
-  } else if (isInvalid) {
-    input.classList.add('input-error');
-    input.classList.remove('input-success');
-    errorEl.textContent = errorMsg;
-    errorEl.classList.add('show');
-    return false;
-  } else {
-    input.classList.remove('input-error');
-    input.classList.add('input-success');
-    errorEl.textContent = '';
-    errorEl.classList.remove('show');
-    return true;
   }
 }
 
+/**
+ * Show validation success on input field
+ * @param {string} inputId - ID of the input element
+ */
+function showInputSuccess(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+
+  const wrapper = input.parentElement;
+  const errorEl = wrapper.querySelector('.error-message');
+
+  input.classList.remove('input-error');
+  input.classList.add('input-success');
+  if (errorEl) {
+    errorEl.textContent = '';
+    errorEl.classList.remove('show');
+  }
+}
+
+/**
+ * Validate all form inputs and show errors
+ * @returns {boolean} True if all inputs are valid
+ */
 function validateAllInputs() {
-  const currentYear = new Date().getFullYear();
   const eventYear = document.getElementById('eventYear').value;
   const birthYear = document.getElementById('birthYear').value;
   const weight = document.getElementById('weight').value;
 
-  const v1 = validateInput('eventYear', eventYear, 2000, 2100, 'Must be between 2000-2100');
-  const v2 = validateInput('birthYear', birthYear, 1900, currentYear + 1, `Must be between 1900-${currentYear + 1}`);
-  const v3 = validateInput('weight', weight, 1, 200, 'Must be between 1-200 kg');
+  // Use our new validation functions
+  const eventYearValidation = validateEventYear(eventYear);
+  const birthYearValidation = validateBirthYear(birthYear);
+  const weightValidation = validateWeight(weight);
 
-  // Check if birth year is before event year
-  if (eventYear && birthYear && Number(birthYear) >= Number(eventYear)) {
-    const input = document.getElementById('birthYear');
-    const wrapper = input.parentElement;
-    let errorEl = wrapper.querySelector('.error-message');
-    if (!errorEl) {
-      errorEl = document.createElement('div');
-      errorEl.className = 'error-message';
-      wrapper.appendChild(errorEl);
+  let isValid = true;
+
+  // Handle event year validation
+  if (!eventYearValidation.valid) {
+    if (eventYear) { // Only show error if field is not empty
+      showInputError('eventYear', eventYearValidation.error);
+      isValid = false;
+    } else {
+      clearInputValidation('eventYear');
     }
-    input.classList.add('input-error');
-    input.classList.remove('input-success');
-    errorEl.textContent = 'Birth year must be before event year';
-    errorEl.classList.add('show');
-    return false;
+  } else {
+    showInputSuccess('eventYear');
   }
 
-  return v1 && v2 && v3;
+  // Handle birth year validation
+  if (!birthYearValidation.valid) {
+    if (birthYear) { // Only show error if field is not empty
+      showInputError('birthYear', birthYearValidation.error);
+      isValid = false;
+    } else {
+      clearInputValidation('birthYear');
+    }
+  } else {
+    // Additional check: birth year must be before event year
+    if (eventYearValidation.valid && birthYearValidation.value >= eventYearValidation.value) {
+      showInputError('birthYear', 'Birth year must be before event year');
+      isValid = false;
+    } else {
+      showInputSuccess('birthYear');
+    }
+  }
+
+  // Handle weight validation
+  if (!weightValidation.valid) {
+    if (weight) { // Only show error if field is not empty
+      showInputError('weight', weightValidation.error);
+      isValid = false;
+    } else {
+      clearInputValidation('weight');
+    }
+  } else {
+    showInputSuccess('weight');
+  }
+
+  return isValid;
 }
 
 function resetForm() {
@@ -1243,17 +1571,17 @@ function parseQuickEntry() {
   if (discipline === "NEWAZA") {
     // Split by "/" and get the part after the weight
     const parts = entry.split('/').map(p => p.trim());
-    console.log('Entry parts:', parts);
+    log('Entry parts:', parts);
     // Find the weight part and get the next one
     for (let i = 0; i < parts.length - 1; i++) {
       if (parts[i].match(/\(?([+-])\)?(\d+(?:\.\d+)?)\s*kg/i)) {
         // Next part should be the belt
         const possibleBelt = parts[i + 1];
-        console.log('Possible belt:', possibleBelt);
+        log('Possible belt:', possibleBelt);
         // Check if it's a valid belt name
         const validBelts = ["ALL KIDS BELTS", "White", "Grey", "Yellow", "Orange", "Blue", "Purple", "Brown", "Black"];
         const matchedBelt = validBelts.find(b => possibleBelt.toUpperCase().includes(b.toUpperCase()));
-        console.log('Matched belt:', matchedBelt);
+        log('Matched belt:', matchedBelt);
         if (matchedBelt) {
           belt = matchedBelt;
         }
@@ -1261,7 +1589,7 @@ function parseQuickEntry() {
       }
     }
   }
-  console.log('Final belt value:', belt);
+  log('Final belt value:', belt);
 
   // Pre-fill the form (always update, even if fields have values)
   if (discipline) {
@@ -1500,27 +1828,17 @@ function checkEligibility(useQuickResult) {
   const disciplineKey = document.getElementById("discipline").value;
   const belt = document.getElementById("belt").value;
 
-  console.log("checkEligibility:", { eventYear, birthYear, weight, gender, disciplineKey, belt, useQuickResult });
+  log("checkEligibility:", { eventYear, birthYear, weight, gender, disciplineKey, belt, useQuickResult });
 
-  // Get discipline label from active toggle button
-  let disciplineLabel;
-  if (disciplineKey === "BABY_MONKEYS") {
-    disciplineLabel = "Baby Monkeys Sumo";
-  } else if (disciplineKey === "GROUNDFIGHT") {
-    disciplineLabel = "Groundfighting";
-  } else if (disciplineKey === "FIGHTING") {
-    disciplineLabel = "Ju-Jitsu Fighting";
-  } else {
-    disciplineLabel = "Jiu-Jitsu Newaza";
-  }
+  // Get discipline label
+  const disciplineLabel = getDisciplineLabel(disciplineKey);
 
   // Determine which result div to use
   const out = useQuickResult ? document.getElementById("quickResult") : document.getElementById("result");
 
   if (!eventYear || !birthYear || !weight) {
-    console.log("Missing values");
-    out.innerHTML = '<div class="blocked">Please enter Event year, Birth year, and Weight.</div>';
-    out.style.display = "block";
+    log("Missing values");
+    setResultMessage(out, 'Please enter Event year, Birth year, and Weight.', 'blocked');
     return;
   }
 
@@ -1831,31 +2149,52 @@ function checkEligibility(useQuickResult) {
 
   // SECURITY FIX: Using DOM API instead of innerHTML
   // The renderResults function safely creates elements
-  console.log("Setting results, HTML length:", html.length);
+  log("Setting results, HTML length:", html.length);
   out.innerHTML = html;
   out.style.display = "block";
-  console.log("Results set successfully");
+  log("Results set successfully");
 }
 
 /** =========================
  *  CSV ANALYSIS FUNCTIONS
  *  ========================= */
 
+/**
+ * Parse CSV text into array of objects
+ * Handles edge cases: UTF-8 BOM, Windows/Unix line endings, empty lines
+ * @param {string} text - CSV text content
+ * @returns {Array<Object>} Array of row objects
+ */
 function parseCSV(text) {
-  const lines = text.split('\n');
+  if (!text || text.trim() === '') return [];
+
+  // Remove UTF-8 BOM if present
+  const cleanedText = text.replace(/^\uFEFF/, '');
+
+  // Split lines handling both Windows (\r\n) and Unix (\n) line endings
+  const lines = cleanedText.split(/\r?\n/);
+
   if (lines.length < 2) return [];
 
   const headers = parseCSVLine(lines[0]);
+  if (headers.length === 0) return [];
+
   const data = [];
 
   for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === '') continue;
+    const trimmedLine = lines[i].trim();
+
+    // Skip empty lines
+    if (trimmedLine === '') continue;
+
     const values = parseCSVLine(lines[i]);
-    if (values.length === 0) continue;
+
+    // Skip if all values are empty
+    if (values.every(v => v.trim() === '')) continue;
 
     const row = {};
     headers.forEach((header, index) => {
-      row[header.trim()] = values[index] || '';
+      row[header.trim()] = (values[index] || '').trim();
     });
     data.push(row);
   }
@@ -1863,6 +2202,11 @@ function parseCSV(text) {
   return data;
 }
 
+/**
+ * Parse a single CSV line handling quoted fields and escaped quotes
+ * @param {string} line - CSV line to parse
+ * @returns {Array<string>} Array of field values
+ */
 function parseCSVLine(line) {
   const result = [];
   let current = '';
@@ -1874,19 +2218,26 @@ function parseCSVLine(line) {
 
     if (char === '"') {
       if (inQuotes && nextChar === '"') {
+        // Escaped quote inside quoted field
         current += '"';
-        i++;
+        i++; // Skip next quote
       } else {
+        // Toggle quote state
         inQuotes = !inQuotes;
       }
     } else if (char === ',' && !inQuotes) {
+      // Field separator (not inside quotes)
       result.push(current);
       current = '';
     } else {
+      // Regular character
       current += char;
     }
   }
+
+  // Add the last field
   result.push(current);
+
   return result;
 }
 
@@ -2079,14 +2430,14 @@ function changeSortOrder(sortType) {
  *  SMART MERGE OPTIMIZER
  *  ========================= */
 function optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions = null) {
-  console.log('🧠 Smart Merge Optimizer: Starting optimization for', singleCategories.length, 'single-athlete categories');
+  log('🧠 Smart Merge Optimizer: Starting optimization for', singleCategories.length, 'single-athlete categories');
 
   const recommendations = {}; // category -> { merge, score, reason }
   const used = new Set(); // Track which singles have been paired
   const targets = new Set(); // Track which categories are targets of recommendations
 
   // Step 1: Build ALL possible pairings between single-athlete categories
-  console.log('📊 Step 1: Finding all possible pairings between singles...');
+  log('📊 Step 1: Finding all possible pairings between singles...');
   const allPairings = [];
 
   for (let i = 0; i < singleCategories.length; i++) {
@@ -2145,10 +2496,10 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     }
   }
 
-  console.log('  Found', allPairings.length, 'possible pairings');
+  log('  Found', allPairings.length, 'possible pairings');
 
   // Step 2: Sort pairings by score (best first) and greedily select
-  console.log('📊 Step 2: Selecting best pairings...');
+  log('📊 Step 2: Selecting best pairings...');
   allPairings.sort((a, b) => b.score - a.score);
 
   for (const pairing of allPairings) {
@@ -2157,7 +2508,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
       continue;
     }
 
-    console.log(`  ✅ Pairing: ${pairing.fromAthlete.name} → ${pairing.toAthlete.name} (${pairing.reason}) Score: ${pairing.score}`);
+    log(`  ✅ Pairing: ${pairing.fromAthlete.name} → ${pairing.toAthlete.name} (${pairing.reason}) Score: ${pairing.score}`);
 
     recommendations[pairing.from] = {
       merge: pairing.merge,
@@ -2171,10 +2522,10 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     targets.add(pairing.to);
   }
 
-  console.log('✅ Step 2 complete: Generated', Object.keys(recommendations).length, 'pairings between singles');
+  log('✅ Step 2 complete: Generated', Object.keys(recommendations).length, 'pairings between singles');
 
   // Step 3: For remaining unpaired singles, find moves to multi-athlete brackets
-  console.log('📊 Step 3: Finding moves to multi-athlete brackets for remaining singles...');
+  log('📊 Step 3: Finding moves to multi-athlete brackets for remaining singles...');
   singleCategories.forEach(catName => {
     if (used.has(catName)) return; // Already has a recommendation
 
@@ -2196,7 +2547,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
       // If the target is a single-athlete category AND has a recommendation, it will be empty
       const targetAthletes = categories[merge.category];
       if (targetAthletes.length === 1 && recommendations[merge.category]) {
-        console.log('    ❌ Excluding', merge.category, '- single athlete will move out, would leave this athlete alone');
+        log('    ❌ Excluding', merge.category, '- single athlete will move out, would leave this athlete alone');
         return false;
       }
 
@@ -2205,7 +2556,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     });
 
     if (validMerges.length === 0) {
-      console.log('  Single athlete:', athlete.name, '- No valid merges (all targets would be empty)');
+      log('  Single athlete:', athlete.name, '- No valid merges (all targets would be empty)');
       return;
     }
 
@@ -2254,7 +2605,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     scoredMerges.sort((a, b) => b.score - a.score);
     const bestMerge = scoredMerges[0];
 
-    console.log('  Single athlete:', athlete.name, '- Best merge:', bestMerge.category, `(score: ${bestMerge.score})`);
+    log('  Single athlete:', athlete.name, '- Best merge:', bestMerge.category, `(score: ${bestMerge.score})`);
 
     recommendations[catName] = {
       merge: bestMerge,
@@ -2263,11 +2614,11 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     };
   });
 
-  console.log('✅ Step 3 complete: Found', Object.keys(recommendations).length - used.size / 2, 'moves to multi-athlete brackets');
-  console.log('✅ Optimization complete:', Object.keys(recommendations).length, 'total recommendations');
-  console.log('   📍 Pairings between singles:', used.size / 2);
-  console.log('   📍 Moves to multi-athlete brackets:', Object.keys(recommendations).length - used.size / 2);
-  console.log('   📍 Target categories:', targets.size);
+  log('✅ Step 3 complete: Found', Object.keys(recommendations).length - used.size / 2, 'moves to multi-athlete brackets');
+  log('✅ Optimization complete:', Object.keys(recommendations).length, 'total recommendations');
+  log('   📍 Pairings between singles:', used.size / 2);
+  log('   📍 Moves to multi-athlete brackets:', Object.keys(recommendations).length - used.size / 2);
+  log('   📍 Target categories:', targets.size);
 
   return { recommendations, targets };
 }
@@ -2276,7 +2627,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
  *  SECOND MATCH OPTIMIZER
  *  ========================= */
 function findSecondMatches(singleCategories, categories, currentYear, beltHandlingMode, recommendations, targets, duplicateRestrictions = null) {
-  console.log('🥊 Second Match Finder: Checking for athletes who could fight twice to help remaining singles');
+  log('🥊 Second Match Finder: Checking for athletes who could fight twice to help remaining singles');
 
   const secondMatches = []; // Array of { helper: catName, helperAthlete, firstMatch, secondMatch, lonely }
 
@@ -2561,8 +2912,8 @@ function analyzeCSV() {
 
       // Detect duplicate athletes and determine movement restrictions FIRST
       const { duplicateMap: duplicateRestrictions, multiDisciplineMap } = detectDuplicateAthletes(categories);
-      console.log('🔍 Duplicate detection complete:', duplicateRestrictions.size, 'restricted entries found');
-      console.log('ℹ️ Multi-discipline athletes:', multiDisciplineMap.size, 'entries found');
+      log('🔍 Duplicate detection complete:', duplicateRestrictions.size, 'restricted entries found');
+      log('ℹ️ Multi-discipline athletes:', multiDisciplineMap.size, 'entries found');
 
       // Run optimizer (all singles can get recommendations)
       let recommendations = {};
@@ -2572,15 +2923,16 @@ function analyzeCSV() {
       const optimizerResult = optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions);
       recommendations = optimizerResult.recommendations;
       recommendationTargets = optimizerResult.targets;
-      console.log('🎯 Smart Recommendations:', Object.keys(recommendations).length, 'recommendations generated');
+      log('🎯 Smart Recommendations:', Object.keys(recommendations).length, 'recommendations generated');
 
       // Find second match opportunities (if enabled)
+      // BUG FIX: On first load, checkbox doesn't exist yet, so default to true
       const secondMatchToggle = document.getElementById('secondMatchToggle');
-      const includeSecondMatches = secondMatchToggle && secondMatchToggle.checked;
+      const includeSecondMatches = secondMatchToggle ? secondMatchToggle.checked : true; // Default to true if checkbox not yet rendered
 
       if (includeSecondMatches) {
         secondMatches = findSecondMatches(singleCategories, categories, currentYear, beltHandlingMode, recommendations, recommendationTargets, duplicateRestrictions);
-        console.log('🥊 Second Matches:', secondMatches.length, 'opportunities found');
+        log('🥊 Second Matches:', secondMatches.length, 'opportunities found');
       }
 
       // Analyze merge options for single categories
@@ -3600,6 +3952,13 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
   return { merges, reasons, blockedByDuplicate };
 }
 
+/**
+ * Format category label for display
+ * @param {Object} cat - Age category object
+ * @param {string} gender - Gender (MALE/FEMALE)
+ * @param {string} disciplineKey - Discipline key
+ * @returns {string} Formatted category label
+ */
 function formatCategoryLabel(cat, gender, disciplineKey) {
   if (disciplineKey === "BABY_MONKEYS") {
     const genderLabel = gender === "MALE" ? "Boys" : "Girls";
@@ -3623,6 +3982,11 @@ function formatCategoryLabel(cat, gender, disciplineKey) {
   }
 }
 
+/**
+ * Format age category for display
+ * @param {string} ageCategory - Age category name
+ * @returns {string} Formatted age display
+ */
 function formatAgeDisplay(ageCategory) {
   if (ageCategory === "MASTERS") {
     return "MASTER 35+";
@@ -4630,23 +4994,17 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Real-time validation
-  document.getElementById('eventYear').addEventListener('input', function() {
-    validateInput('eventYear', this.value, 2000, 2100, 'Must be between 2000-2100');
-  });
+  // Real-time validation with debouncing for better performance
+  const debouncedValidation = debounce(validateAllInputs, VALIDATION_CONSTANTS.INPUT_DEBOUNCE_MS);
 
-  document.getElementById('birthYear').addEventListener('input', function() {
-    const currentYear = new Date().getFullYear();
-    validateInput('birthYear', this.value, 1900, currentYear + 1, `Must be between 1900-${currentYear + 1}`);
-  });
+  document.getElementById('eventYear').addEventListener('input', debouncedValidation);
+  document.getElementById('birthYear').addEventListener('input', debouncedValidation);
+  document.getElementById('weight').addEventListener('input', debouncedValidation);
 
-  document.getElementById('weight').addEventListener('input', function() {
-    validateInput('weight', this.value, 1, 200, 'Must be between 1-200 kg');
-  });
-
-  // Also validate on blur to check cross-field validation (birth year vs event year)
+  // Also validate on blur to ensure immediate validation when leaving field
   document.getElementById('birthYear').addEventListener('blur', validateAllInputs);
   document.getElementById('eventYear').addEventListener('blur', validateAllInputs);
+  document.getElementById('weight').addEventListener('blur', validateAllInputs);
 
   // Reset button
   const resetBtn = document.getElementById('resetBtn');
