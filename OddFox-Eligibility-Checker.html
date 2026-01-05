@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.1.1"; // Bug fix: second match suggestions now appear on initial CSV load
+const APP_VERSION = "3.2.0"; // Code organization: extract helper functions, add JSDoc, replace more console.log
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -1266,6 +1266,32 @@ function getBlockedReason(ageCat, disciplineKey) {
   return "No age move-up is permitted from " + ageCat + " in this discipline under JJIF competition rules.";
 }
 
+/**
+ * Get human-readable discipline label
+ * @param {string} disciplineKey - Discipline key (FIGHTING, NEWAZA, etc.)
+ * @returns {string} Human-readable label
+ */
+function getDisciplineLabel(disciplineKey) {
+  switch (disciplineKey) {
+    case "BABY_MONKEYS":
+      return "Baby Monkeys Sumo";
+    case "GROUNDFIGHT":
+      return "Groundfighting";
+    case "FIGHTING":
+      return "Ju-Jitsu Fighting";
+    case "NEWAZA":
+      return "Jiu-Jitsu Newaza";
+    default:
+      return disciplineKey;
+  }
+}
+
+/**
+ * Get allowed age categories for athlete including move-ups
+ * @param {Object} ageObj - Age category object
+ * @param {string} disciplineKey - Discipline key
+ * @returns {Array<Object>} Array of allowed age category objects
+ */
 function allowedAgeCategories(ageObj, disciplineKey) {
   const base = ageObj;
 
@@ -1545,17 +1571,17 @@ function parseQuickEntry() {
   if (discipline === "NEWAZA") {
     // Split by "/" and get the part after the weight
     const parts = entry.split('/').map(p => p.trim());
-    console.log('Entry parts:', parts);
+    log('Entry parts:', parts);
     // Find the weight part and get the next one
     for (let i = 0; i < parts.length - 1; i++) {
       if (parts[i].match(/\(?([+-])\)?(\d+(?:\.\d+)?)\s*kg/i)) {
         // Next part should be the belt
         const possibleBelt = parts[i + 1];
-        console.log('Possible belt:', possibleBelt);
+        log('Possible belt:', possibleBelt);
         // Check if it's a valid belt name
         const validBelts = ["ALL KIDS BELTS", "White", "Grey", "Yellow", "Orange", "Blue", "Purple", "Brown", "Black"];
         const matchedBelt = validBelts.find(b => possibleBelt.toUpperCase().includes(b.toUpperCase()));
-        console.log('Matched belt:', matchedBelt);
+        log('Matched belt:', matchedBelt);
         if (matchedBelt) {
           belt = matchedBelt;
         }
@@ -1563,7 +1589,7 @@ function parseQuickEntry() {
       }
     }
   }
-  console.log('Final belt value:', belt);
+  log('Final belt value:', belt);
 
   // Pre-fill the form (always update, even if fields have values)
   if (discipline) {
@@ -1802,27 +1828,17 @@ function checkEligibility(useQuickResult) {
   const disciplineKey = document.getElementById("discipline").value;
   const belt = document.getElementById("belt").value;
 
-  console.log("checkEligibility:", { eventYear, birthYear, weight, gender, disciplineKey, belt, useQuickResult });
+  log("checkEligibility:", { eventYear, birthYear, weight, gender, disciplineKey, belt, useQuickResult });
 
-  // Get discipline label from active toggle button
-  let disciplineLabel;
-  if (disciplineKey === "BABY_MONKEYS") {
-    disciplineLabel = "Baby Monkeys Sumo";
-  } else if (disciplineKey === "GROUNDFIGHT") {
-    disciplineLabel = "Groundfighting";
-  } else if (disciplineKey === "FIGHTING") {
-    disciplineLabel = "Ju-Jitsu Fighting";
-  } else {
-    disciplineLabel = "Jiu-Jitsu Newaza";
-  }
+  // Get discipline label
+  const disciplineLabel = getDisciplineLabel(disciplineKey);
 
   // Determine which result div to use
   const out = useQuickResult ? document.getElementById("quickResult") : document.getElementById("result");
 
   if (!eventYear || !birthYear || !weight) {
-    console.log("Missing values");
-    out.innerHTML = '<div class="blocked">Please enter Event year, Birth year, and Weight.</div>';
-    out.style.display = "block";
+    log("Missing values");
+    setResultMessage(out, 'Please enter Event year, Birth year, and Weight.', 'blocked');
     return;
   }
 
@@ -2133,10 +2149,10 @@ function checkEligibility(useQuickResult) {
 
   // SECURITY FIX: Using DOM API instead of innerHTML
   // The renderResults function safely creates elements
-  console.log("Setting results, HTML length:", html.length);
+  log("Setting results, HTML length:", html.length);
   out.innerHTML = html;
   out.style.display = "block";
-  console.log("Results set successfully");
+  log("Results set successfully");
 }
 
 /** =========================
@@ -3936,6 +3952,13 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
   return { merges, reasons, blockedByDuplicate };
 }
 
+/**
+ * Format category label for display
+ * @param {Object} cat - Age category object
+ * @param {string} gender - Gender (MALE/FEMALE)
+ * @param {string} disciplineKey - Discipline key
+ * @returns {string} Formatted category label
+ */
 function formatCategoryLabel(cat, gender, disciplineKey) {
   if (disciplineKey === "BABY_MONKEYS") {
     const genderLabel = gender === "MALE" ? "Boys" : "Girls";
@@ -3959,6 +3982,11 @@ function formatCategoryLabel(cat, gender, disciplineKey) {
   }
 }
 
+/**
+ * Format age category for display
+ * @param {string} ageCategory - Age category name
+ * @returns {string} Formatted age display
+ */
 function formatAgeDisplay(ageCategory) {
   if (ageCategory === "MASTERS") {
     return "MASTER 35+";
