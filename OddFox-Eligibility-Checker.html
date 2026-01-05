@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.1.0"; // Code quality improvements: refactored validation, enhanced CSV parsing, debouncing
+const APP_VERSION = "3.1.1"; // Bug fix: second match suggestions now appear on initial CSV load
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2414,14 +2414,14 @@ function changeSortOrder(sortType) {
  *  SMART MERGE OPTIMIZER
  *  ========================= */
 function optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions = null) {
-  console.log('🧠 Smart Merge Optimizer: Starting optimization for', singleCategories.length, 'single-athlete categories');
+  log('🧠 Smart Merge Optimizer: Starting optimization for', singleCategories.length, 'single-athlete categories');
 
   const recommendations = {}; // category -> { merge, score, reason }
   const used = new Set(); // Track which singles have been paired
   const targets = new Set(); // Track which categories are targets of recommendations
 
   // Step 1: Build ALL possible pairings between single-athlete categories
-  console.log('📊 Step 1: Finding all possible pairings between singles...');
+  log('📊 Step 1: Finding all possible pairings between singles...');
   const allPairings = [];
 
   for (let i = 0; i < singleCategories.length; i++) {
@@ -2480,10 +2480,10 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     }
   }
 
-  console.log('  Found', allPairings.length, 'possible pairings');
+  log('  Found', allPairings.length, 'possible pairings');
 
   // Step 2: Sort pairings by score (best first) and greedily select
-  console.log('📊 Step 2: Selecting best pairings...');
+  log('📊 Step 2: Selecting best pairings...');
   allPairings.sort((a, b) => b.score - a.score);
 
   for (const pairing of allPairings) {
@@ -2492,7 +2492,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
       continue;
     }
 
-    console.log(`  ✅ Pairing: ${pairing.fromAthlete.name} → ${pairing.toAthlete.name} (${pairing.reason}) Score: ${pairing.score}`);
+    log(`  ✅ Pairing: ${pairing.fromAthlete.name} → ${pairing.toAthlete.name} (${pairing.reason}) Score: ${pairing.score}`);
 
     recommendations[pairing.from] = {
       merge: pairing.merge,
@@ -2506,10 +2506,10 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     targets.add(pairing.to);
   }
 
-  console.log('✅ Step 2 complete: Generated', Object.keys(recommendations).length, 'pairings between singles');
+  log('✅ Step 2 complete: Generated', Object.keys(recommendations).length, 'pairings between singles');
 
   // Step 3: For remaining unpaired singles, find moves to multi-athlete brackets
-  console.log('📊 Step 3: Finding moves to multi-athlete brackets for remaining singles...');
+  log('📊 Step 3: Finding moves to multi-athlete brackets for remaining singles...');
   singleCategories.forEach(catName => {
     if (used.has(catName)) return; // Already has a recommendation
 
@@ -2531,7 +2531,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
       // If the target is a single-athlete category AND has a recommendation, it will be empty
       const targetAthletes = categories[merge.category];
       if (targetAthletes.length === 1 && recommendations[merge.category]) {
-        console.log('    ❌ Excluding', merge.category, '- single athlete will move out, would leave this athlete alone');
+        log('    ❌ Excluding', merge.category, '- single athlete will move out, would leave this athlete alone');
         return false;
       }
 
@@ -2540,7 +2540,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     });
 
     if (validMerges.length === 0) {
-      console.log('  Single athlete:', athlete.name, '- No valid merges (all targets would be empty)');
+      log('  Single athlete:', athlete.name, '- No valid merges (all targets would be empty)');
       return;
     }
 
@@ -2589,7 +2589,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     scoredMerges.sort((a, b) => b.score - a.score);
     const bestMerge = scoredMerges[0];
 
-    console.log('  Single athlete:', athlete.name, '- Best merge:', bestMerge.category, `(score: ${bestMerge.score})`);
+    log('  Single athlete:', athlete.name, '- Best merge:', bestMerge.category, `(score: ${bestMerge.score})`);
 
     recommendations[catName] = {
       merge: bestMerge,
@@ -2598,11 +2598,11 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     };
   });
 
-  console.log('✅ Step 3 complete: Found', Object.keys(recommendations).length - used.size / 2, 'moves to multi-athlete brackets');
-  console.log('✅ Optimization complete:', Object.keys(recommendations).length, 'total recommendations');
-  console.log('   📍 Pairings between singles:', used.size / 2);
-  console.log('   📍 Moves to multi-athlete brackets:', Object.keys(recommendations).length - used.size / 2);
-  console.log('   📍 Target categories:', targets.size);
+  log('✅ Step 3 complete: Found', Object.keys(recommendations).length - used.size / 2, 'moves to multi-athlete brackets');
+  log('✅ Optimization complete:', Object.keys(recommendations).length, 'total recommendations');
+  log('   📍 Pairings between singles:', used.size / 2);
+  log('   📍 Moves to multi-athlete brackets:', Object.keys(recommendations).length - used.size / 2);
+  log('   📍 Target categories:', targets.size);
 
   return { recommendations, targets };
 }
@@ -2611,7 +2611,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
  *  SECOND MATCH OPTIMIZER
  *  ========================= */
 function findSecondMatches(singleCategories, categories, currentYear, beltHandlingMode, recommendations, targets, duplicateRestrictions = null) {
-  console.log('🥊 Second Match Finder: Checking for athletes who could fight twice to help remaining singles');
+  log('🥊 Second Match Finder: Checking for athletes who could fight twice to help remaining singles');
 
   const secondMatches = []; // Array of { helper: catName, helperAthlete, firstMatch, secondMatch, lonely }
 
@@ -2896,8 +2896,8 @@ function analyzeCSV() {
 
       // Detect duplicate athletes and determine movement restrictions FIRST
       const { duplicateMap: duplicateRestrictions, multiDisciplineMap } = detectDuplicateAthletes(categories);
-      console.log('🔍 Duplicate detection complete:', duplicateRestrictions.size, 'restricted entries found');
-      console.log('ℹ️ Multi-discipline athletes:', multiDisciplineMap.size, 'entries found');
+      log('🔍 Duplicate detection complete:', duplicateRestrictions.size, 'restricted entries found');
+      log('ℹ️ Multi-discipline athletes:', multiDisciplineMap.size, 'entries found');
 
       // Run optimizer (all singles can get recommendations)
       let recommendations = {};
@@ -2907,15 +2907,16 @@ function analyzeCSV() {
       const optimizerResult = optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions);
       recommendations = optimizerResult.recommendations;
       recommendationTargets = optimizerResult.targets;
-      console.log('🎯 Smart Recommendations:', Object.keys(recommendations).length, 'recommendations generated');
+      log('🎯 Smart Recommendations:', Object.keys(recommendations).length, 'recommendations generated');
 
       // Find second match opportunities (if enabled)
+      // BUG FIX: On first load, checkbox doesn't exist yet, so default to true
       const secondMatchToggle = document.getElementById('secondMatchToggle');
-      const includeSecondMatches = secondMatchToggle && secondMatchToggle.checked;
+      const includeSecondMatches = secondMatchToggle ? secondMatchToggle.checked : true; // Default to true if checkbox not yet rendered
 
       if (includeSecondMatches) {
         secondMatches = findSecondMatches(singleCategories, categories, currentYear, beltHandlingMode, recommendations, recommendationTargets, duplicateRestrictions);
-        console.log('🥊 Second Matches:', secondMatches.length, 'opportunities found');
+        log('🥊 Second Matches:', secondMatches.length, 'opportunities found');
       }
 
       // Analyze merge options for single categories
