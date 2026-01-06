@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.3.0"; // Fix: plus weight crash and use current year
+const APP_VERSION = "3.3.1"; // Fix: remove incorrect warning for same plus weight moves
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2094,15 +2094,15 @@ function checkEligibility(useQuickResult) {
               const warning = '⚠️ Please check actual weight is below -' + nextWeight + ' kg';
               html += '<div class="copy-option" style="padding:12px;margin-top:8px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;"><div><strong style="font-size:14px;">' + line + '</strong><div style="color:#64748b;font-size:11px;margin-top:2px;">Age move-up</div><div style="color:#f59e0b;font-size:11px;margin-top:4px;font-weight:500;">' + warning + '</div></div><button class="copy-btn" style="width:auto;padding:8px 16px;margin-top:0;" onclick="copyText(\'' + safeLine + '\')">Copy</button></div></div>';
             } else if (samePlusWeight) {
-              // Scenario 2: Same plus weight in target
+              // Scenario 2: Same plus weight in target - no weight verification needed
               const weightDisplay = "(+)" + trueWc.own.value + " kg";
               let line = categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
               if (disciplineKey === "NEWAZA" && belt) {
                 line += ' / ' + belt;
               }
               const safeLine = line.replace(/'/g, "\\'");
-              const warning = '⚠️ Please check actual weight is below -' + trueWc.own.value + ' kg';
-              html += '<div class="copy-option" style="padding:12px;margin-top:8px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;"><div><strong style="font-size:14px;">' + line + '</strong><div style="color:#64748b;font-size:11px;margin-top:2px;">Age move-up</div><div style="color:#f59e0b;font-size:11px;margin-top:4px;font-weight:500;">' + warning + '</div></div><button class="copy-btn" style="width:auto;padding:8px 16px;margin-top:0;" onclick="copyText(\'' + safeLine + '\')">Copy</button></div></div>';
+              // No warning needed - athlete is already in plus category and moving to same plus category
+              html += '<div class="copy-option" style="padding:12px;margin-top:8px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;"><div><strong style="font-size:14px;">' + line + '</strong><div style="color:#64748b;font-size:11px;margin-top:2px;">Age move-up</div></div><button class="copy-btn" style="width:auto;padding:8px 16px;margin-top:0;" onclick="copyText(\'' + safeLine + '\')">Copy</button></div></div>';
             }
           }
         }
@@ -3745,8 +3745,8 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
                 type: "Age move-up",
                 isWeightMoveUp: false,
                 athleteCount: athleteCount,
-                requiresWeightCheck: true,
-                warning: "⚠️ Please check actual weight is below -" + targetWeight + " kg"
+                requiresWeightCheck: !isTargetPlus, // Only check weight if moving to minus weight, not same plus
+                warning: isTargetPlus ? undefined : "⚠️ Please check actual weight is below -" + targetWeight + " kg"
               });
             } else {
               console.log('    -> Skipping (no athletes in target category)');
