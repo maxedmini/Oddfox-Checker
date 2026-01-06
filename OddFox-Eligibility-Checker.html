@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.2.6"; // Fix: plus weight banner only shows for plus weight warnings
+const APP_VERSION = "3.2.7"; // Fix: support plus weight notation in weight input (+48 or (+)48)
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -1823,7 +1823,24 @@ function renderResults(out, data) {
 function checkEligibility(useQuickResult) {
   const eventYear = Number(document.getElementById("eventYear").value);
   const birthYear = Number(document.getElementById("birthYear").value);
-  const weight = Number(document.getElementById("weight").value);
+
+  // Handle plus weight notation: "+48" or "(+)48" means "over 48"
+  let weightInput = document.getElementById("weight").value.trim();
+  let weight;
+
+  // Check if user entered plus weight notation
+  if (weightInput.startsWith('+') || weightInput.startsWith('(+)')) {
+    // Extract the number and add 0.1 to trigger plus weight logic
+    const baseWeight = parseFloat(weightInput.replace(/[+()]/g, ''));
+    if (!isNaN(baseWeight)) {
+      weight = baseWeight + 0.1;
+    } else {
+      weight = NaN;
+    }
+  } else {
+    weight = Number(weightInput);
+  }
+
   const gender = document.getElementById("gender").value;
   const disciplineKey = document.getElementById("discipline").value;
   const belt = document.getElementById("belt").value;
