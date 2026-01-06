@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.2.9"; // Debug: enable logging for quick check troubleshooting
+const APP_VERSION = "3.3.0"; // Fix: plus weight crash and use current year
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -900,7 +900,7 @@ const VALIDATION_CONSTANTS = {
   INPUT_DEBOUNCE_MS: 300
 };
 
-const DEBUG = true; // Set to true for development logging
+const DEBUG = false; // Set to true for development logging
 
 /** =========================
  *  UTILITY FUNCTIONS
@@ -1632,9 +1632,9 @@ function parseQuickEntry() {
   if (ageCategory) {
     let eventYear = Number(document.getElementById("eventYear").value);
 
-    // If event year is not set, default to current year (2025)
+    // If event year is not set, default to current year
     if (!eventYear) {
-      eventYear = 2025;
+      eventYear = new Date().getFullYear();
       document.getElementById("eventYear").value = eventYear;
     }
 
@@ -2091,7 +2091,7 @@ function checkEligibility(useQuickResult) {
                 line += ' / ' + belt;
               }
               const safeLine = line.replace(/'/g, "\\'");
-              const warning = '⚠️ Please check actual weight is below -' + trueWc.up.value + ' kg';
+              const warning = '⚠️ Please check actual weight is below -' + nextWeight + ' kg';
               html += '<div class="copy-option" style="padding:12px;margin-top:8px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;"><div><strong style="font-size:14px;">' + line + '</strong><div style="color:#64748b;font-size:11px;margin-top:2px;">Age move-up</div><div style="color:#f59e0b;font-size:11px;margin-top:4px;font-weight:500;">' + warning + '</div></div><button class="copy-btn" style="width:auto;padding:8px 16px;margin-top:0;" onclick="copyText(\'' + safeLine + '\')">Copy</button></div></div>';
             } else if (samePlusWeight) {
               // Scenario 2: Same plus weight in target
