@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.2.7"; // Fix: support plus weight notation in weight input (+48 or (+)48)
+const APP_VERSION = "3.2.8"; // Fix: quick check now sets event year if missing
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -1626,9 +1626,16 @@ function parseQuickEntry() {
   
   // Calculate birth year based on age category and current event year
   if (ageCategory) {
-    const eventYear = Number(document.getElementById("eventYear").value) || 2025;
+    let eventYear = Number(document.getElementById("eventYear").value);
+
+    // If event year is not set, default to current year (2025)
+    if (!eventYear) {
+      eventYear = 2025;
+      document.getElementById("eventYear").value = eventYear;
+    }
+
     const ageObj = getAgeObjByName(ageCategory);
-    
+
     if (ageObj) {
       // Constants for default ages
       const ADULT_DEFAULT_AGE = 21;
@@ -1644,7 +1651,7 @@ function parseQuickEntry() {
         // For youth categories, use the minimum age
         targetAge = ageObj.min;
       }
-      
+
       const birthYear = eventYear - targetAge;
       document.getElementById("birthYear").value = birthYear;
     }
