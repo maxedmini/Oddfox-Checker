@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.2.3"; // Bug fix: use warning field to determine age+weight banner display
+const APP_VERSION = "3.2.4"; // UX: improved plus weight warning message with specific weight threshold
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2059,7 +2059,7 @@ function checkEligibility(useQuickResult) {
                 line += ' / ' + belt;
               }
               const safeLine = line.replace(/'/g, "\\'");
-              const warning = '⚠️ Verify athlete agrees to age move-up (from plus weight)';
+              const warning = '⚠️ Please check actual weight is below -' + trueWc.up.value + ' kg';
               html += '<div class="copy-option" style="padding:12px;margin-top:8px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;"><div><strong style="font-size:14px;">' + line + '</strong><div style="color:#64748b;font-size:11px;margin-top:2px;">Age move-up</div><div style="color:#f59e0b;font-size:11px;margin-top:4px;font-weight:500;">' + warning + '</div></div><button class="copy-btn" style="width:auto;padding:8px 16px;margin-top:0;" onclick="copyText(\'' + safeLine + '\')">Copy</button></div></div>';
             } else if (samePlusWeight) {
               // Scenario 2: Same plus weight in target
@@ -2069,7 +2069,7 @@ function checkEligibility(useQuickResult) {
                 line += ' / ' + belt;
               }
               const safeLine = line.replace(/'/g, "\\'");
-              const warning = '⚠️ Verify athlete agrees to age move-up (from plus weight)';
+              const warning = '⚠️ Please check actual weight is below -' + trueWc.own.value + ' kg';
               html += '<div class="copy-option" style="padding:12px;margin-top:8px;"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;"><div><strong style="font-size:14px;">' + line + '</strong><div style="color:#64748b;font-size:11px;margin-top:2px;">Age move-up</div><div style="color:#f59e0b;font-size:11px;margin-top:4px;font-weight:500;">' + warning + '</div></div><button class="copy-btn" style="width:auto;padding:8px 16px;margin-top:0;" onclick="copyText(\'' + safeLine + '\')">Copy</button></div></div>';
             }
           }
@@ -3707,14 +3707,14 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
             console.log('    Age move-up (plus weight):', fullCategory, '- Athletes:', athleteCount);
 
             if (athleteCount >= 1) {
-              console.log('    -> Adding age move-up from plus weight');
+              log('    -> Adding age move-up from plus weight');
               addMerge({
                 category: fullCategory,
                 type: "Age move-up",
                 isWeightMoveUp: false,
                 athleteCount: athleteCount,
                 requiresWeightCheck: true,
-                warning: "⚠️ Verify athlete agrees to age move-up (from plus weight)"
+                warning: "⚠️ Please check actual weight is below -" + targetWeight + " kg"
               });
             } else {
               console.log('    -> Skipping (no athletes in target category)');
@@ -3925,14 +3925,14 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
               console.log('  Age + belt move (own weight):', ageBeltMoveCategory, '- Athletes:', athleteCount);
 
               if (athleteCount >= 1) {
-                console.log('    -> Adding age + belt move-up (own weight)');
+                log('    -> Adding age + belt move-up (own weight)');
                 addMerge({
                   category: ageBeltMoveCategory,
                   type: "Age + belt move-up",
                   isWeightMoveUp: false,
                   athleteCount: athleteCount,
                   requiresWeightCheck: originalWc.own.type === "plus",
-                  warning: originalWc.own.type === "plus" ? "⚠️ Verify athlete agrees to age move-up (from plus weight)" : undefined
+                  warning: originalWc.own.type === "plus" ? "⚠️ Please check actual weight is below -" + originalWc.own.value + " kg" : undefined
                 });
               } else {
                 console.log('    -> Skipping (no athletes in target category)');
