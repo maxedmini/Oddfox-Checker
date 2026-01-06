@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.2.8"; // Fix: quick check now sets event year if missing
+const APP_VERSION = "3.2.9"; // Debug: enable logging for quick check troubleshooting
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -900,7 +900,7 @@ const VALIDATION_CONSTANTS = {
   INPUT_DEBOUNCE_MS: 300
 };
 
-const DEBUG = false; // Set to true for development logging
+const DEBUG = true; // Set to true for development logging
 
 /** =========================
  *  UTILITY FUNCTIONS
@@ -1554,6 +1554,7 @@ function parseQuickEntry() {
   // Extract weight (e.g., "-32 kg", "+70 kg", "(+)69 kg", "(-) 32 kg")
   const weightMatch = entry.match(/\(?([+-])\)?(\d+(?:\.\d+)?)\s*kg/i);
   let weight = null;
+  log('Weight regex match result:', weightMatch);
   if (weightMatch) {
     // For "-32 kg", use 32 as the weight (upper limit of that class)
     // For "+70 kg" or "(+)70 kg", use a value above 70 (e.g., 70.1) to place in plus class
@@ -1563,6 +1564,9 @@ function parseQuickEntry() {
     } else {
       weight = weightValue; // At the limit
     }
+    log('Parsed weight:', weight);
+  } else {
+    log('No weight match found in entry:', entry);
   }
 
   // Extract belt (for NEWAZA/BJJ) - should be after the weight
@@ -1672,13 +1676,17 @@ function parseQuickEntry() {
   }
   if (gender) parts.push(gender);
   if (ageCategory) parts.push(ageCategory);
-  if (weight) parts.push(weightMatch[1] + weightMatch[2] + " kg");
+  if (weight && weightMatch) parts.push(weightMatch[1] + weightMatch[2] + " kg");
   if (belt) parts.push(belt);
+
+  log('Parsed values:', { discipline, gender, ageCategory, weight, belt });
+  log('Parts array:', parts);
 
   if (parts.length > 0) {
     // Show results in quick result area (no popup)
     document.getElementById("quickResult").style.display = "block";
-    
+
+    log('Running checkEligibility with useQuickResult=true');
     // Automatically run eligibility check
     checkEligibility(true); // Pass true to indicate using quick entry
   } else {
