@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.2.5"; // UX: add prominent banner for plus weight verification
+const APP_VERSION = "3.2.6"; // Fix: plus weight banner only shows for plus weight warnings
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -4264,14 +4264,16 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       itemHtml += '  </div>';
     }
 
-    // Show warning banner for plus weight moves
+    // Show warning banner for plus weight moves ONLY (not for age+weight move-ups)
     if (item.recommendation && item.recommendation.merge && item.recommendation.merge.warning) {
-      // Extract weight value from warning message (e.g., "Please check actual weight is below -52 kg")
       const warningText = item.recommendation.merge.warning;
-      itemHtml += '  <div style="margin-bottom: 12px; padding: 8px 12px; background: #1e1b4b; border-left: 3px solid #6366f1; border-radius: 4px;">';
-      itemHtml += '    <div style="font-size: 12px; color: #818cf8; font-weight: 600;">⚖️ Plus Weight Verification Required</div>';
-      itemHtml += '    <div style="font-size: 11px; color: #a5b4fc; margin-top: 4px;">' + warningText + '</div>';
-      itemHtml += '  </div>';
+      // Only show plus weight banner if the warning is specifically about weight verification
+      if (warningText.includes("Please check actual weight is below")) {
+        itemHtml += '  <div style="margin-bottom: 12px; padding: 8px 12px; background: #1e1b4b; border-left: 3px solid #6366f1; border-radius: 4px;">';
+        itemHtml += '    <div style="font-size: 12px; color: #818cf8; font-weight: 600;">⚖️ Plus Weight Verification Required</div>';
+        itemHtml += '    <div style="font-size: 11px; color: #a5b4fc; margin-top: 4px;">' + warningText + '</div>';
+        itemHtml += '  </div>';
+      }
     }
 
     itemHtml += '  <div class="category-name">' + item.category + '</div>';
