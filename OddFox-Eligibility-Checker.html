@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.2.2"; // Bug fix: show age+weight warning based on recommended merge in Smart view
+const APP_VERSION = "3.2.3"; // Bug fix: use warning field to determine age+weight banner display
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2974,18 +2974,20 @@ function analyzeCSV() {
           // Attach recommendation if available
           const recommendation = recommendations[catName] || null;
 
-          // Determine if warning banner should show
+          // Determine if warning banner should show based on the warning field
           let requiresConfirmation;
           if (recommendation) {
-            // In Smart view: show warning if the RECOMMENDED merge is age+weight
-            requiresConfirmation =
-              recommendation.merge.type === "Age + weight move-up" ||
-              recommendation.merge.type === "Age + belt + weight move-up";
+            // In Smart view: show warning if the RECOMMENDED merge has age+weight warning
+            const warning = recommendation.merge.warning || "";
+            requiresConfirmation = warning.includes("age and weight move-up") ||
+              warning.includes("age, belt and weight move-up");
           } else {
-            // In All Merges view: show warning if ALL merges are age+weight
-            requiresConfirmation = result.merges.every(m =>
-              m.type === "Age + weight move-up" || m.type === "Age + belt + weight move-up"
-            );
+            // In All Merges view: show warning if ALL merges have age+weight warnings
+            requiresConfirmation = result.merges.every(m => {
+              const warning = m.warning || "";
+              return warning.includes("age and weight move-up") ||
+                warning.includes("age, belt and weight move-up");
+            });
           }
 
           // All merges now go to withMerges, but flag age+weight for warning display
