@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.2.4"; // UX: improved plus weight warning message with specific weight threshold
+const APP_VERSION = "3.2.5"; // UX: add prominent banner for plus weight verification
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -4261,6 +4261,16 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       itemHtml += '  <div style="margin-bottom: 12px; padding: 8px 12px; background: #422006; border-left: 3px solid #f59e0b; border-radius: 4px;">';
       itemHtml += '    <div style="font-size: 12px; color: #fbbf24; font-weight: 600;">⚠️ Age + Weight Move-Up</div>';
       itemHtml += '    <div style="font-size: 11px; color: #fcd34d; margin-top: 4px;">Requires both age AND weight move-up. Please verify athlete agrees before proceeding.</div>';
+      itemHtml += '  </div>';
+    }
+
+    // Show warning banner for plus weight moves
+    if (item.recommendation && item.recommendation.merge && item.recommendation.merge.warning) {
+      // Extract weight value from warning message (e.g., "Please check actual weight is below -52 kg")
+      const warningText = item.recommendation.merge.warning;
+      itemHtml += '  <div style="margin-bottom: 12px; padding: 8px 12px; background: #1e1b4b; border-left: 3px solid #6366f1; border-radius: 4px;">';
+      itemHtml += '    <div style="font-size: 12px; color: #818cf8; font-weight: 600;">⚖️ Plus Weight Verification Required</div>';
+      itemHtml += '    <div style="font-size: 11px; color: #a5b4fc; margin-top: 4px;">' + warningText + '</div>';
       itemHtml += '  </div>';
     }
 
