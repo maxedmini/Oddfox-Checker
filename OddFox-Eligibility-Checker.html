@@ -2971,8 +2971,8 @@ function analyzeCSV() {
         }
 
         if (result.merges.length > 0) {
-          // Check if ALL merges are age+weight combinations (require athlete confirmation)
-          const allAreAgeAndWeight = result.merges.every(m =>
+          // Check if ANY merges are age+weight combinations (require athlete confirmation)
+          const hasAgeAndWeight = result.merges.some(m =>
             m.type === "Age + weight move-up" || m.type === "Age + belt + weight move-up"
           );
 
@@ -2985,7 +2985,7 @@ function analyzeCSV() {
             athlete,
             merges: result.merges,
             recommendation,
-            requiresConfirmation: allAreAgeAndWeight // Flag for displaying warning
+            requiresConfirmation: hasAgeAndWeight // Flag for displaying warning
           });
         } else if (isRecommendationTarget || hasIncomingMerge) {
           // This athlete has no outgoing merge options, but someone could move TO them
