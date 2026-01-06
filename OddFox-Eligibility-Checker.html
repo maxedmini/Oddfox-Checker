@@ -772,7 +772,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.2.0"; // Code organization: extract helper functions, add JSDoc, replace more console.log
+const APP_VERSION = "3.2.3"; // Bug fix: use warning field to determine age+weight banner display
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2971,13 +2971,24 @@ function analyzeCSV() {
         }
 
         if (result.merges.length > 0) {
-          // Check if ALL merges are age+weight combinations (require athlete confirmation)
-          const allAreAgeAndWeight = result.merges.every(m =>
-            m.type === "Age + weight move-up" || m.type === "Age + belt + weight move-up"
-          );
-
           // Attach recommendation if available
           const recommendation = recommendations[catName] || null;
+
+          // Determine if warning banner should show based on the warning field
+          let requiresConfirmation;
+          if (recommendation) {
+            // In Smart view: show warning if the RECOMMENDED merge has age+weight warning
+            const warning = recommendation.merge.warning || "";
+            requiresConfirmation = warning.includes("age and weight move-up") ||
+              warning.includes("age, belt and weight move-up");
+          } else {
+            // In All Merges view: show warning if ALL merges have age+weight warnings
+            requiresConfirmation = result.merges.every(m => {
+              const warning = m.warning || "";
+              return warning.includes("age and weight move-up") ||
+                warning.includes("age, belt and weight move-up");
+            });
+          }
 
           // All merges now go to withMerges, but flag age+weight for warning display
           withMerges.push({
@@ -2985,7 +2996,7 @@ function analyzeCSV() {
             athlete,
             merges: result.merges,
             recommendation,
-            requiresConfirmation: allAreAgeAndWeight // Flag for displaying warning
+            requiresConfirmation: requiresConfirmation // Flag for displaying warning
           });
         } else if (isRecommendationTarget || hasIncomingMerge) {
           // This athlete has no outgoing merge options, but someone could move TO them
