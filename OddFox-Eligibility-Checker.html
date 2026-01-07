@@ -4270,24 +4270,27 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
         console.log('    Mixed weight classes:', wc);
 
         if (wc.own) {
-          // Generate MIXED category label
-          const categoryLabel = formatCategoryLabel(cat, 'MIXED', disciplineKey);
+          // Check if there are athletes of the opposite gender in the same age/weight
+          const oppositeGenderCategoryLabel = formatCategoryLabel(cat, oppositeGender, disciplineKey);
           const ageDisplay = formatAgeDisplay(cat.n);
           const weightDisplay = wc.own.type === "plus"
             ? "(+)" + wc.own.value + " kg"
             : "-" + wc.own.value + " kg";
 
-          let fullCategory = categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
+          const oppositeGenderCategory = oppositeGenderCategoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
+          const oppositeGenderCount = getCategoryCount(oppositeGenderCategory, allCategories, null);
 
-          // Check if this category has athletes (from either gender)
-          const athleteCount = getCategoryCount(fullCategory, allCategories, athlete);
-          console.log('    Athletes in', fullCategory + ':', athleteCount);
+          console.log('    Checking opposite gender category:', oppositeGenderCategory, '- count:', oppositeGenderCount);
 
-          if (athleteCount >= 1) {
+          if (oppositeGenderCount >= 1) {
+            // Generate MIXED category label
+            const mixedCategoryLabel = formatCategoryLabel(cat, 'MIXED', disciplineKey);
+            let fullCategory = mixedCategoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
+
             console.log('    -> Adding MIXED category merge option');
             addMerge({
               category: fullCategory,
-              type: 'Same category (different weight) - MIXED',
+              type: 'Cross-gender merge - MIXED',
               athlete: athlete,
               isMixed: true,
               requiresWeightCheck: wc.own.type === "plus",
@@ -4303,17 +4306,21 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
               ? "(+)" + upWeight.value + " kg"
               : "-" + upWeight.value + " kg";
 
-            const categoryLabel = formatCategoryLabel(cat, 'MIXED', disciplineKey);
             const ageDisplay = formatAgeDisplay(cat.n);
-            let fullCategory = categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
 
-            const athleteCount = getCategoryCount(fullCategory, allCategories, athlete);
+            // Check if opposite gender has athletes in this weight class
+            const oppositeGenderCategoryLabel = formatCategoryLabel(cat, oppositeGender, disciplineKey);
+            const oppositeGenderCategory = oppositeGenderCategoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
+            const oppositeGenderCount = getCategoryCount(oppositeGenderCategory, allCategories, null);
 
-            if (athleteCount >= 1) {
+            if (oppositeGenderCount >= 1) {
+              const mixedCategoryLabel = formatCategoryLabel(cat, 'MIXED', disciplineKey);
+              let fullCategory = mixedCategoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
+
               console.log('    -> Adding MIXED weight move-up');
               addMerge({
                 category: fullCategory,
-                type: 'Weight move-up - MIXED',
+                type: 'Weight move-up + Cross-gender - MIXED',
                 athlete: athlete,
                 isMixed: true,
                 requiresWeightCheck: upWeight.type === "plus",
