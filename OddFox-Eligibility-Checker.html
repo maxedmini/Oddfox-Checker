@@ -4134,6 +4134,106 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
     }
   }
 
+  // DOB-based matching logic for 2-year age span when enabled
+  if (useExactDOB && athleteBirthDate && exactAge) {
+    console.log('Checking DOB-based matches for', athlete.name, '(useExactDOB enabled)');
+    console.log('  Athlete exact age:', exactAge.years.toFixed(2), 'years');
+
+    // Find all age categories within 2-year span
+    const ageCatsWithinSpan = cats.filter((cat, idx) => {
+      const catAgeRange = AGE_CATS[cat.n];
+      if (!catAgeRange) return false;
+
+      const minAge = catAgeRange.min;
+      const maxAge = catAgeRange.max;
+
+      // Check if athlete's age is within 2 years of this category's range
+      const yearsDiffMin = Math.abs(exactAge.ageReached - minAge);
+      const yearsDiffMax = Math.abs(exactAge.ageReached - maxAge);
+
+      // Include if within 2 years of either boundary
+      return yearsDiffMin <= 2 || yearsDiffMax <= 2 || (exactAge.ageReached >= minAge && exactAge.ageReached <= maxAge);
+    });
+
+    console.log('  Age categories within 2-year span:', ageCatsWithinSpan.map(c => c.n));
+
+    // For each matching age category, check for merge opportunities
+    ageCatsWithinSpan.forEach((cat, idx) => {
+      // Skip the athlete's own age category (already handled in main loop)
+      if (cat.n === athlete.ageCategory) {
+        return;
+      }
+
+      console.log('  Checking DOB merge into', cat.n);
+
+      // Get weight table for this age category
+      const weightTable = WEIGHTS[gender][cat.n];
+      if (!weightTable || weightTable.length === 0) {
+        console.log('    No weight table for', gender, cat.n);
+        return;
+      }
+
+      const wc = getOwnAndUpWeightClasses(weight, weightTable);
+      console.log('    Weight classes:', wc);
+
+      if (wc.own) {
+        // Generate category label
+        const categoryLabel = formatCategoryLabel(cat, gender, disciplineKey);
+        const ageDisplay = formatAgeDisplay(cat.n);
+        const weightDisplay = wc.own.type === "plus"
+          ? "(+)" + wc.own.value + " kg"
+          : "-" + wc.own.value + " kg";
+
+        let fullCategory = categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
+
+        // Check if this category has athletes
+        const athleteCount = getCategoryCount(fullCategory, allCategories, athlete);
+        console.log('    Athletes in', fullCategory + ':', athleteCount);
+
+        if (athleteCount >= 1) {
+          console.log('    -> Adding DOB-based merge option');
+          addMerge({
+            category: fullCategory,
+            type: 'DOB-based age match (within 2 years)',
+            athlete: athlete,
+            isDOBBased: true,
+            crossAgeCategory: true,
+            requiresWeightCheck: wc.own.type === "plus",
+            warning: wc.own.type === "plus" ? "⚠️ Please check actual weight is below -" + wc.own.value + " kg" : undefined
+          });
+        }
+      }
+
+      // Also check weight move-ups in DOB-matched categories
+      if (wc.up && wc.up.length > 0) {
+        wc.up.forEach(upWeight => {
+          const weightDisplay = upWeight.type === "plus"
+            ? "(+)" + upWeight.value + " kg"
+            : "-" + upWeight.value + " kg";
+
+          const categoryLabel = formatCategoryLabel(cat, gender, disciplineKey);
+          const ageDisplay = formatAgeDisplay(cat.n);
+          let fullCategory = categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
+
+          const athleteCount = getCategoryCount(fullCategory, allCategories, athlete);
+
+          if (athleteCount >= 1) {
+            console.log('    -> Adding DOB-based weight move-up');
+            addMerge({
+              category: fullCategory,
+              type: 'DOB-based age match + weight move-up',
+              athlete: athlete,
+              isDOBBased: true,
+              crossAgeCategory: true,
+              requiresWeightCheck: upWeight.type === "plus",
+              warning: upWeight.type === "plus" ? "⚠️ Please check actual weight is below -" + upWeight.value + " kg" : undefined
+            });
+          }
+        });
+      }
+    });
+  }
+
   // Cross-gender merge logic for U8/U10/U12 when enabled
   if (allowGenderMergeU12) {
     const youthCategories = ['U8', 'U10', 'U12'];
@@ -4570,6 +4670,9 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
         if (rec.isMixed) {
           itemHtml += ' <span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">MIXED</span>';
         }
+        if (rec.isDOBBased) {
+          itemHtml += ' <span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">DOB-MATCHED</span>';
+        }
         itemHtml += ' <button onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\'); event.stopPropagation();" style="display: inline; width: auto; padding: 4px 8px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: background 0.2s; vertical-align: baseline;" onmouseover="this.style.background=\'#059669\'" onmouseout="this.style.background=\'#10b981\'">📋</button></div>';
         itemHtml += '        <div class="merge-type">' + rec.type + ' • ' + rec.athleteCount + ' athletes</div>';
         itemHtml += '        <div style="color: #64748b; font-size: 11px; margin-top: 4px;">' + item.recommendation.reason + '</div>';
@@ -4597,6 +4700,9 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
           itemHtml += '        <div class="merge-text">' + merge.category;
           if (merge.isMixed) {
             itemHtml += ' <span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">MIXED</span>';
+          }
+          if (merge.isDOBBased) {
+            itemHtml += ' <span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">DOB-MATCHED</span>';
           }
           itemHtml += ' <button onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\'); event.stopPropagation();" style="display: inline; width: auto; padding: 4px 8px; background: #334155; color: #cbd5e1; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: background 0.2s; vertical-align: baseline;" onmouseover="this.style.background=\'#475569\'" onmouseout="this.style.background=\'#334155\'">📋</button></div>';
           itemHtml += '        <div class="merge-type">' + merge.type + ' • ' + merge.athleteCount + ' athletes</div>';
