@@ -752,6 +752,27 @@
           <div style="margin-top: 4px;"><strong style="color: #1e293b;">Brown/Black only:</strong> U21+ keep Brown/Black only</div>
         </div>
       </div>
+
+      <!-- Advanced Merge Options -->
+      <div style="margin-top: 12px;">
+        <label style="font-weight: 600; margin-bottom: 8px; display: block; color: #1e293b;">Advanced Merge Options</label>
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="allowGenderMergeU12" onchange="reanalyzeIfLoaded()" style="margin: 0; cursor: pointer;">
+            <span style="font-size: 14px;">Allow male/female merges for U8-U12 categories</span>
+          </label>
+
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="useExactDOB" onchange="reanalyzeIfLoaded()" style="margin: 0; cursor: pointer;">
+            <span style="font-size: 14px;">Use exact date of birth for matching (2-year age span)</span>
+          </label>
+        </div>
+
+        <div id="advancedWarning" style="display: none; background: #fef3c7; border-left: 3px solid #f59e0b; padding: 8px; margin-top: 8px; font-size: 12px; color: #92400e;">
+          ⚠️ Advanced options may generate merges that require regulatory approval
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1150,6 +1171,111 @@ function getOwnAndUpWeightClasses(weight, limits) {
 function formatWeightClass(wc) {
   if (!wc) return "";
   return (wc.type === "plus" ? "+" + wc.value + " kg" : "-" + wc.value + " kg");
+}
+
+/**
+ * Parse birth date string into structured format
+ * @param {string} dateString - Date string (expected format: YYYY-MM-DD)
+ * @returns {object|null} Parsed date object or null if invalid
+ */
+function parseBirthDate(dateString) {
+  if (!dateString) return null;
+
+  // Try ISO format first (YYYY-MM-DD)
+  const isoMatch = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return {
+      full: dateString,
+      year: parseInt(isoMatch[1]),
+      month: parseInt(isoMatch[2]),
+      day: parseInt(isoMatch[3]),
+      date: new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]))
+    };
+  }
+
+  // Fallback: extract year only
+  const yearMatch = dateString.match(/\d{4}/);
+  return yearMatch ? { year: parseInt(yearMatch[0]), full: null, date: null } : null;
+}
+
+/**
+ * Calculate exact age from birth date and event year
+ * @param {object} birthDate - Parsed birth date object from parseBirthDate()
+ * @param {number} eventYear - Event year
+ * @returns {object|null} Age information or null if invalid
+ */
+function calculateExactAge(birthDate, eventYear) {
+  if (!birthDate || !birthDate.date) return null;
+
+  // Reference date: January 1 of event year
+  const referenceDate = new Date(eventYear, 0, 1);
+  const ageInDays = (referenceDate - birthDate.date) / (1000 * 60 * 60 * 24);
+  const ageInYears = ageInDays / 365.25;
+
+  return {
+    days: Math.floor(ageInDays),
+    years: ageInYears,
+    ageReached: Math.floor(ageInYears)
+  };
+}
+
+/**
+ * Calculate age difference between two athletes by birth date
+ * @param {object} birthDate1 - First athlete's parsed birth date
+ * @param {object} birthDate2 - Second athlete's parsed birth date
+ * @returns {object|null} Age difference information or null if invalid
+ */
+function calculateDOBDifference(birthDate1, birthDate2) {
+  if (!birthDate1?.date || !birthDate2?.date) return null;
+
+  const diffMs = Math.abs(birthDate1.date - birthDate2.date);
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+  return {
+    days: Math.floor(diffDays),
+    months: Math.floor(diffDays / 30.44), // Average month length
+    years: diffDays / 365.25,
+    withinTwoYears: diffDays <= 730
+  };
+}
+
+/**
+ * Create unified weight table combining male and female weights for mixed categories
+ * @param {string} ageCategory - Age category (e.g., "U8", "U10", "U12")
+ * @returns {array} Sorted array of all available weight classes
+ */
+function getUnifiedWeightTable(ageCategory) {
+  // Ensure weight tables exist
+  if (!WEIGHTS['MALE'] || !WEIGHTS['FEMALE']) {
+    console.error('Weight tables not defined');
+    return [];
+  }
+
+  // Get both male and female weight tables
+  const maleWeights = WEIGHTS['MALE'][ageCategory] || [];
+  const femaleWeights = WEIGHTS['FEMALE'][ageCategory] || [];
+
+  // Combine and deduplicate weights, then sort
+  const unified = [...new Set([...maleWeights, ...femaleWeights])].sort((a, b) => a - b);
+
+  return unified;
+}
+
+/**
+ * Determine which genders to check for merge options
+ * @param {object} athlete - Athlete object
+ * @param {string} ageCategory - Target age category
+ * @param {boolean} allowGenderMergeU12 - Whether cross-gender merges are allowed for U8-U12
+ * @returns {array} Array of genders to check
+ */
+function getGendersToCheck(athlete, ageCategory, allowGenderMergeU12) {
+  const youthCategories = ['U8', 'U10', 'U12'];
+
+  if (allowGenderMergeU12 && youthCategories.includes(ageCategory)) {
+    return ['MALE', 'FEMALE', 'MIXED'];
+  }
+
+  return [athlete.gender];
 }
 
 /**
@@ -2906,6 +3032,7 @@ function analyzeCSV() {
 
         categories[normalizedGroup].push({
           name: `${row['Firstname'] || ''} ${row['Lastname'] || ''}`.trim(),
+          birthDate: row['Birth'] || '',
           birthYear: row['Birth'] ? row['Birth'].split('-')[0] : '',
           weight: row['Weighin weight'] || '',
           gender: (row['Gender '] || row['Gender'] || '').trim(),
@@ -2929,6 +3056,23 @@ function analyzeCSV() {
 
       if (beltHandlingMode !== 'keep') {
         applyBeltHandling(categories, beltHandlingMode);
+      }
+
+      // Read advanced merge options
+      const allowGenderMergeU12 = document.getElementById('allowGenderMergeU12')?.checked || false;
+      const useExactDOB = document.getElementById('useExactDOB')?.checked || false;
+
+      // Validate DOB availability when option is enabled
+      if (useExactDOB) {
+        let invalidDOBCount = 0;
+        Object.values(categories).flat().forEach(athlete => {
+          const parsed = parseBirthDate(athlete.birthDate);
+          if (!parsed || !parsed.date) invalidDOBCount++;
+        });
+
+        if (invalidDOBCount > 0) {
+          console.warn(`⚠️ ${invalidDOBCount} athletes have invalid/missing birth dates for exact DOB matching`);
+        }
       }
 
       // Find single-athlete categories
@@ -5016,6 +5160,26 @@ document.addEventListener('DOMContentLoaded', function() {
   const eventYearInput = document.getElementById('eventYear');
   if (eventYearInput) {
     eventYearInput.value = new Date().getFullYear();
+  }
+
+  // Advanced merge options warning toggle
+  const genderMergeCheckbox = document.getElementById('allowGenderMergeU12');
+  const dobCheckbox = document.getElementById('useExactDOB');
+  const advancedWarning = document.getElementById('advancedWarning');
+
+  function updateAdvancedWarning() {
+    if ((genderMergeCheckbox && genderMergeCheckbox.checked) || (dobCheckbox && dobCheckbox.checked)) {
+      if (advancedWarning) advancedWarning.style.display = 'block';
+    } else {
+      if (advancedWarning) advancedWarning.style.display = 'none';
+    }
+  }
+
+  if (genderMergeCheckbox) {
+    genderMergeCheckbox.addEventListener('change', updateAdvancedWarning);
+  }
+  if (dobCheckbox) {
+    dobCheckbox.addEventListener('change', updateAdvancedWarning);
   }
 
   // Restore previous CSV analysis results if available
