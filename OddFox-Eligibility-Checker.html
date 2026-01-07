@@ -3041,6 +3041,7 @@ function analyzeCSV() {
           ageCategory: row['AGE'] || '',
           weightClass: row['WEIGHT'] || '',
           group: normalizedGroup,
+          registeredCategory: group,
           entry: row['Entry'] || ''
         });
       });
