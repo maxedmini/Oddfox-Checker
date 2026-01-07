@@ -4924,19 +4924,16 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
         itemHtml += '    <div style="font-size: 11px; color: #cbd5e1;">Athletes from a 2-person bracket are recommended to move up to join you, creating a 3-person bracket.</div>';
       }
       itemHtml += '  </div>';
-    } else if (item.isIncomingTarget && item.merges.length > 0) {
-      // Has both incoming and outgoing merges - prioritize incoming (don't show outgoing merges)
+    } else if (item.isIncomingTarget && item.merges.length > 0 && item.incomingDetails && item.incomingDetails.athletes) {
+      // Has both a smart recommendation for incoming bracket AND outgoing merge options
+      // ONLY show incoming message if it's from Step 3 (minBracketSize3) with specific details
+      // Otherwise, prioritize showing the athlete's own merge options
       itemHtml += '  <div style="margin-top: 8px; padding: 12px; background: #1e293b; border-left: 3px solid #10b981; border-radius: 4px;">';
       itemHtml += '    <div style="font-size: 12px; color: #10b981; font-weight: 600; margin-bottom: 4px;">📥 INCOMING ATHLETES:</div>';
-      if (item.incomingDetails && item.incomingDetails.athletes) {
-        // Show specific details about which athletes are moving up (from Step 3)
-        const athleteNames = item.incomingDetails.athletes.join(' and ');
-        itemHtml += '    <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 6px;">2 athletes from <strong style="color: #10b981;">' + item.incomingDetails.fromCategory + '</strong> are recommended to move up to join you:</div>';
-        itemHtml += '    <div style="font-size: 11px; color: #e2e8f0; margin-left: 12px;">• ' + athleteNames + '</div>';
-        itemHtml += '    <div style="font-size: 11px; color: #94a3b8; margin-top: 6px;">This will create a 3-person bracket at your weight.</div>';
-      } else {
-        itemHtml += '    <div style="font-size: 11px; color: #cbd5e1;">Athletes from a 2-person bracket in a lower weight are recommended to move up to join you, creating a 3-person bracket at your weight.</div>';
-      }
+      const athleteNames = item.incomingDetails.athletes.join(' and ');
+      itemHtml += '    <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 6px;">2 athletes from <strong style="color: #10b981;">' + item.incomingDetails.fromCategory + '</strong> are recommended to move up to join you:</div>';
+      itemHtml += '    <div style="font-size: 11px; color: #e2e8f0; margin-left: 12px;">• ' + athleteNames + '</div>';
+      itemHtml += '    <div style="font-size: 11px; color: #94a3b8; margin-top: 6px;">This will create a 3-person bracket at your weight.</div>';
       itemHtml += '  </div>';
     } else if (item.hasSecondMatchHelp) {
       itemHtml += '  <div style="margin-top: 8px; padding: 12px; background: #1e293b; border-left: 3px solid #a855f7; border-radius: 4px;">';
