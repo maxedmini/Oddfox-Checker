@@ -2889,7 +2889,11 @@ function findSecondMatches(singleCategories, categories, currentYear, beltHandli
   const secondMatches = []; // Array of { helper: catName, helperAthlete, firstMatch, secondMatch, lonely }
 
   // Get all athletes who are already paired (either as mover or target)
-  const paired = new Set([...Object.keys(recommendations), ...targets]);
+  // Filter out synthetic pair keys (e.g., "category::pair0") from Step 4
+  const paired = new Set([
+    ...Object.keys(recommendations).filter(key => !key.includes('::pair')),
+    ...targets
+  ]);
 
   // Find remaining unpaired singles (those without recommendations AND without merge options)
   const unpaired = singleCategories.filter(cat => {
