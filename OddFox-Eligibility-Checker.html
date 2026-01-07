@@ -2903,7 +2903,7 @@ function findSecondMatches(singleCategories, categories, currentYear, beltHandli
   // Filter out synthetic pair keys (e.g., "category::pair0") from Step 4
   const paired = new Set([
     ...Object.keys(recommendations).filter(key => !key.includes('::pair')),
-    ...targets
+    ...targets.keys()
   ]);
 
   // Find remaining unpaired singles (those without recommendations AND without merge options)
