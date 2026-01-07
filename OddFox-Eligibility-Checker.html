@@ -4149,18 +4149,24 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
 
     // Find all age categories within 2-year span
     const ageCatsWithinSpan = cats.filter((cat, idx) => {
-      const catAgeRange = AGE_CATS[cat.n];
+      const catAgeRange = AGE_CATS.find(c => c.n === cat.n);
       if (!catAgeRange) return false;
 
       const minAge = catAgeRange.min;
       const maxAge = catAgeRange.max;
 
-      // Check if athlete's age is within 2 years of this category's range
-      const yearsDiffMin = Math.abs(exactAge.ageReached - minAge);
-      const yearsDiffMax = Math.abs(exactAge.ageReached - maxAge);
+      // Check if athlete could compete with someone in this category who is within 2 years
+      // Example: 10.36 year old in U12 (11-12) should match U10 (9-10) because 10.36 - 9 = 1.36 years
+      // Strategy: Check if athlete's age is within 2 years of ANY age in the category range
+      const athleteAge = exactAge.years;
 
-      // Include if within 2 years of either boundary
-      return yearsDiffMin <= 2 || yearsDiffMax <= 2 || (exactAge.ageReached >= minAge && exactAge.ageReached <= maxAge);
+      // Athlete could compete with youngest in category (minAge)
+      const diffToMin = Math.abs(athleteAge - minAge);
+      // Athlete could compete with oldest in category (maxAge + 0.99)
+      const diffToMax = Math.abs(athleteAge - (maxAge + 0.99));
+
+      // Include if athlete is within 2 years of anyone who could be in this category
+      return diffToMin <= 2 || diffToMax <= 2 || (athleteAge >= minAge && athleteAge <= maxAge + 0.99);
     });
 
     console.log('  Age categories within 2-year span:', ageCatsWithinSpan.map(c => c.n));
