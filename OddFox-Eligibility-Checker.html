@@ -2729,6 +2729,26 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
         // Must be LOWER weight (so it can move UP to the single)
         if (catParsed.weight >= singleParsed.weight) return false;
 
+        // CRITICAL: Must be only ONE weight division below (not 2+ divisions)
+        // Get the weight table for this age/gender combination
+        const gender = catParsed.gender;
+        const ageCategory = catParsed.age;
+        const weightTable = WEIGHTS[gender] && WEIGHTS[gender][ageCategory] ? WEIGHTS[gender][ageCategory] : null;
+
+        if (!weightTable) return false;
+
+        // Find the bracket's weight and the single's weight in the weight table
+        const bracketWeightIndex = weightTable.indexOf(catParsed.weight);
+        const singleWeightIndex = weightTable.indexOf(singleParsed.weight);
+
+        if (bracketWeightIndex === -1 || singleWeightIndex === -1) return false;
+
+        // Only allow if they are adjacent in the weight table (difference of 1 index)
+        if (singleWeightIndex - bracketWeightIndex !== 1) {
+          log(`  ⚠️ Skipping ${cat} → ${singleCat}: Not adjacent weight classes (${singleWeightIndex - bracketWeightIndex} divisions apart)`);
+          return false;
+        }
+
         // Bracket must not already have recommendations
         if (recommendations[cat]) return false;
 
