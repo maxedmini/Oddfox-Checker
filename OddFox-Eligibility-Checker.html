@@ -3109,13 +3109,14 @@ function analyzeCSV() {
         }
       }
 
-      // Find categories that need merging based on minimum bracket size
-      const minSize = minBracketSize3 ? 3 : 2;
-      const singleCategories = Object.keys(categories).filter(cat => categories[cat].length < minSize);
+      // Find single-athlete categories (always process these)
+      // Note: When minBracketSize3 is enabled, we still only process 1-athlete categories,
+      // but the optimizer will strongly prefer merging them into 2-athlete categories to create 3
+      const singleCategories = Object.keys(categories).filter(cat => categories[cat].length === 1);
 
       if (singleCategories.length === 0) {
         const message = minBracketSize3
-          ? '✓ All categories have at least 3 athletes!'
+          ? '✓ All categories have at least 2 athletes! Enable smart merging to try reaching 3+ where possible.'
           : '✓ No single-athlete categories found. All categories have multiple athletes!';
         resultsDiv.innerHTML = '<div class="info-badge">' + message + '</div>';
         return;
@@ -3154,21 +3155,17 @@ function analyzeCSV() {
       const ageAndWeightOnly = [];
       const withoutMerges = [];
 
-      // First pass: Build merge options for ALL athletes in categories below minimum size
+      // First pass: Build merge options for ALL single athletes
       const allMergeResults = new Map();
       singleCategories.forEach(catName => {
-        const athletesInCategory = categories[catName];
-        // Process each athlete in the category
-        athletesInCategory.forEach((athlete, idx) => {
-          const athleteKey = catName + (athletesInCategory.length > 1 ? `::${idx}` : '');
-          const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
-          allMergeResults.set(athleteKey, { athlete, result, category: catName });
-        });
+        const athlete = categories[catName][0]; // Single-athlete categories only have one athlete
+        const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
+        allMergeResults.set(catName, { athlete, result });
       });
 
       // Second pass: Check for potential incoming merges
-      for (const [athleteKey, athleteData] of allMergeResults) {
-        const { athlete, result, category: catName } = athleteData;
+      singleCategories.forEach(catName => {
+        const { athlete, result } = allMergeResults.get(catName);
 
         // Check if this category is a target of a smart recommendation
         const isRecommendationTarget = recommendationTargets.has(catName);
@@ -3253,7 +3250,7 @@ function analyzeCSV() {
             }
           }
         }
-      }
+      });
 
       // Sort results using default order
       sortCSVResults(withMerges, 'default');
