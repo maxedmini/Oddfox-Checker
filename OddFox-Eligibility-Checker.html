@@ -2577,7 +2577,7 @@ function changeSortOrder(sortType) {
   // Smart recommendations always enabled
   const useSmartRecommendations = true;
 
-  renderCSVResults(csvWithMerges, csvAgeAndWeightOnly, csvWithoutMerges, csvTotal, useSmartRecommendations, csvSecondMatches);
+  renderCSVResults(csvWithMerges, csvAgeAndWeightOnly, csvWithoutMerges, csvTotal, useSmartRecommendations, csvSecondMatches, csvDuplicateMap, csvAllCategories);
 
   // Restore the selected sort option
   const dropdown = document.getElementById('csvSortOrder');
@@ -3228,7 +3228,7 @@ function analyzeCSV() {
       csvDuplicateMap = duplicateRestrictions;
 
       // Render results
-      renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, singleCategories.length, useSmartRecommendations, secondMatches, duplicateRestrictions);
+      renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, singleCategories.length, useSmartRecommendations, secondMatches, duplicateRestrictions, categories);
 
     } catch (error) {
       resultsDiv.innerHTML = '<div class="blocked">Error parsing CSV: ' + error.message + '</div>';
@@ -3287,6 +3287,64 @@ function getCategoryCount(categoryName, allCategories, excludeAthlete) {
   }
 
   return 0;
+}
+
+/**
+ * Get list of athletes in a category
+ * @param {string} categoryName - Full category name
+ * @param {Object} allCategories - All categories with athletes
+ * @param {Object} excludeAthlete - Athlete to exclude from list
+ * @returns {Array} List of athletes in the category
+ */
+function getCategoryAthletes(categoryName, allCategories, excludeAthlete) {
+  const normalizedKey = normalizeCategoryKey(categoryName);
+
+  if (allCategories[normalizedKey]) {
+    let athletes = allCategories[normalizedKey];
+
+    // Exclude the specified athlete if provided
+    if (excludeAthlete) {
+      athletes = athletes.filter(a => a.name !== excludeAthlete.name);
+    }
+
+    return athletes;
+  }
+
+  return [];
+}
+
+/**
+ * Generate HTML for athlete list dropdown
+ * @param {string} mergeCategory - Category name to show athletes for
+ * @param {Object} currentAthlete - Current athlete being displayed
+ * @param {string} dropdownId - Unique ID for the dropdown
+ * @returns {string} HTML for the dropdown
+ */
+function generateAthleteListDropdown(mergeCategory, currentAthlete, dropdownId) {
+  const athletes = getCategoryAthletes(mergeCategory, csvAllCategories, currentAthlete);
+
+  if (athletes.length === 0) {
+    return '';
+  }
+
+  let html = '';
+  html += '<div style="margin-top: 8px;">';
+  html += '  <button onclick="toggleAthleteList(\'' + dropdownId + '\')" style="background: transparent; color: #94a3b8; border: 1px solid #475569; padding: 4px 12px; font-size: 11px; cursor: pointer; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.background=\'#1e293b\';this.style.color=\'#cbd5e1\';" onmouseout="this.style.background=\'transparent\';this.style.color=\'#94a3b8\';">';
+  html += '    <span id="' + dropdownId + '-icon">▶</span> Show athletes in this category (' + athletes.length + ')';
+  html += '  </button>';
+  html += '  <div id="' + dropdownId + '" style="display: none; margin-top: 8px; padding: 8px; background: #0f172a; border-radius: 4px; border: 1px solid #334155;">';
+
+  athletes.forEach((athlete, idx) => {
+    html += '    <div style="padding: 6px; border-bottom: ' + (idx < athletes.length - 1 ? '1px solid #1e293b' : 'none') + ';">';
+    html += '      <div style="font-size: 11px; color: #e2e8f0; font-weight: 500;">' + athlete.name + '</div>';
+    html += '      <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">Currently in: ' + athlete.registeredCategory + '</div>';
+    html += '    </div>';
+  });
+
+  html += '  </div>';
+  html += '</div>';
+
+  return html;
 }
 
 function findBeltIgnoringMatches(categoryName, allCategories) {
@@ -4540,7 +4598,7 @@ function escapeCsvValue(value) {
   return stringValue;
 }
 
-function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, useSmartRecommendations, secondMatches = [], duplicateRestrictions = null) {
+function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, useSmartRecommendations, secondMatches = [], duplicateRestrictions = null, allCategories = {}) {
   // Store currently active tab before re-rendering
   let currentActiveTab = null;
   const activeTabElement = document.querySelector('.csv-tab.active');
@@ -4562,6 +4620,7 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
   csvUseSmartRecommendations = useSmartRecommendations || false;
   csvSecondMatches = secondMatches || [];
   csvTotal = total;
+  csvAllCategories = allCategories;
 
   const resultsDiv = document.getElementById('csvResults');
   let html = '';
@@ -4698,6 +4757,7 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
         }
         itemHtml += ' <button onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\'); event.stopPropagation();" style="display: inline; width: auto; padding: 4px 8px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: background 0.2s; vertical-align: baseline;" onmouseover="this.style.background=\'#059669\'" onmouseout="this.style.background=\'#10b981\'">📋</button></div>';
         itemHtml += '        <div class="merge-type">' + rec.type + ' • ' + rec.athleteCount + ' athletes</div>';
+        itemHtml += generateAthleteListDropdown(rec.category, item.athlete, mergeId + '-athletes');
         itemHtml += '        <div style="color: #64748b; font-size: 11px; margin-top: 4px;">' + item.recommendation.reason + '</div>';
         if (rec.warning) {
           itemHtml += '        <div style="color: #f59e0b; font-size: 11px; margin-top: 4px; font-weight: 500;">' + rec.warning + '</div>';
@@ -4729,6 +4789,7 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
           }
           itemHtml += ' <button onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\'); event.stopPropagation();" style="display: inline; width: auto; padding: 4px 8px; background: #334155; color: #cbd5e1; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: background 0.2s; vertical-align: baseline;" onmouseover="this.style.background=\'#475569\'" onmouseout="this.style.background=\'#334155\'">📋</button></div>';
           itemHtml += '        <div class="merge-type">' + merge.type + ' • ' + merge.athleteCount + ' athletes</div>';
+          itemHtml += generateAthleteListDropdown(merge.category, item.athlete, mergeId + '-athletes');
           if (merge.warning) {
             itemHtml += '        <div style="color: #f59e0b; font-size: 11px; margin-top: 4px; font-weight: 500;">' + merge.warning + '</div>';
           }
@@ -5381,6 +5442,23 @@ function copyAthleteName(name) {
       alert('Failed to copy. Please copy manually: ' + decodedName);
     }
     document.body.removeChild(textArea);
+  }
+}
+
+/**
+ * Toggle athlete list dropdown visibility
+ * @param {string} dropdownId - ID of the dropdown to toggle
+ */
+function toggleAthleteList(dropdownId) {
+  const dropdown = document.getElementById(dropdownId);
+  const icon = document.getElementById(dropdownId + '-icon');
+
+  if (dropdown) {
+    const isHidden = dropdown.style.display === 'none';
+    dropdown.style.display = isHidden ? 'block' : 'none';
+    if (icon) {
+      icon.textContent = isHidden ? '▼' : '▶';
+    }
   }
 }
 
