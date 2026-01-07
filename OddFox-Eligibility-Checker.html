@@ -2699,10 +2699,91 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
 
   log('✅ Step 2 complete: Generated', Object.keys(recommendations).length, 'pairings between singles');
 
-  // Step 3: For remaining unpaired singles, find moves to multi-athlete brackets
-  log('📊 Step 3: Finding moves to multi-athlete brackets for remaining singles...');
+  // Step 3: When minBracketSize3 is enabled, look for 2-athlete brackets that can move up to join singles
+  // IMPORTANT: This runs BEFORE singles move to multi-athlete brackets, so 2-athlete brackets
+  // get priority to move UP to join singles (creating 3-person brackets) rather than having
+  // singles move DOWN to join 2-athlete brackets
+  if (minBracketSize3) {
+    log('📊 Step 3: Finding 2-athlete brackets that can move up to create 3-person brackets...');
+
+    // Find all 2-athlete categories
+    const twoAthleteCategories = Object.keys(categories).filter(cat => {
+      const athletes = categories[cat];
+      return athletes.length === 2 && !recommendations[cat]; // 2 athletes and no one is moving out yet
+    });
+
+    log('  Found', twoAthleteCategories.length, '2-athlete brackets to consider');
+
+    twoAthleteCategories.forEach(twoCat => {
+      const parsed = parseCategoryForSort(twoCat);
+      const athletes = categories[twoCat];
+
+      // Check if there's a single athlete in the next weight up (same age/gender/discipline)
+      // Athletes from the 2-athlete bracket will both move up
+      const result = findMergeOptions(athletes[0], currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
+
+      // Look for weight-up moves that target a single-athlete category
+      const viableTargets = result.merges.filter(merge => {
+        // Must be a weight move (same age category)
+        if (!merge.type || !merge.type.includes('Weight move-up')) return false;
+
+        // Target must be a single-athlete category
+        const targetCat = categories[merge.category];
+        if (!targetCat || targetCat.length !== 1) return false;
+
+        // Target single athlete must not already have a recommendation to move elsewhere
+        if (recommendations[merge.category]) return false;
+
+        return true;
+      });
+
+      if (viableTargets.length > 0) {
+        // Pick the closest weight move-UP (must be higher weight)
+        // Filter to only include targets with higher weight than current
+        const upwardTargets = viableTargets.filter(merge => {
+          const targetWeight = parseCategoryForSort(merge.category).weight;
+          return targetWeight > parsed.weight;
+        });
+
+        if (upwardTargets.length === 0) {
+          log('  ⚠️  No upward weight targets available for', twoCat);
+          return; // Skip this 2-athlete bracket - can't move down
+        }
+
+        upwardTargets.sort((a, b) => {
+          const weightA = parseCategoryForSort(a.category).weight;
+          const weightB = parseCategoryForSort(b.category).weight;
+          return (weightA - parsed.weight) - (weightB - parsed.weight); // Closest weight UP
+        });
+
+        const bestTarget = upwardTargets[0];
+
+        log(`  ✓ Found opportunity: Move 2-athlete bracket ${twoCat} up to join single in ${bestTarget.category}`);
+
+        // Create recommendations for BOTH athletes in the 2-athlete bracket
+        athletes.forEach((athlete, idx) => {
+          recommendations[twoCat + `::pair${idx}`] = {
+            merge: bestTarget,
+            score: 120, // High score - this creates a 3-person bracket!
+            reason: '2-athlete bracket moving up to create 3-person bracket',
+            isPairMove: true,
+            pairCategory: twoCat
+          };
+        });
+
+        // Mark the target as used
+        targets.add(bestTarget.category);
+      }
+    });
+
+    log('✅ Step 3 complete');
+  }
+
+  // Step 4: For remaining unpaired singles, find moves to multi-athlete brackets
+  log('📊 Step 4: Finding moves to multi-athlete brackets for remaining singles...');
   singleCategories.forEach(catName => {
     if (used.has(catName)) return; // Already has a recommendation
+    if (targets.has(catName)) return; // This single is receiving a 2-athlete bracket (from Step 3)
 
     const athlete = categories[catName][0];
     const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
@@ -2804,84 +2885,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     };
   });
 
-  log('✅ Step 3 complete: Found', Object.keys(recommendations).length - used.size / 2, 'moves to multi-athlete brackets');
-
-  // Step 4: When minBracketSize3 is enabled, look for 2-athlete brackets that can move up to join singles
-  if (minBracketSize3) {
-    log('📊 Step 4: Finding 2-athlete brackets that can move up to create 3-person brackets...');
-
-    // Find all 2-athlete categories
-    const twoAthleteCategories = Object.keys(categories).filter(cat => {
-      const athletes = categories[cat];
-      return athletes.length === 2 && !recommendations[cat]; // 2 athletes and no one is moving out yet
-    });
-
-    log('  Found', twoAthleteCategories.length, '2-athlete brackets to consider');
-
-    twoAthleteCategories.forEach(twoCat => {
-      const parsed = parseCategoryForSort(twoCat);
-      const athletes = categories[twoCat];
-
-      // Check if there's a single athlete in the next weight up (same age/gender/discipline)
-      // Athletes from the 2-athlete bracket will both move up
-      const result = findMergeOptions(athletes[0], currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
-
-      // Look for weight-up moves that target a single-athlete category
-      const viableTargets = result.merges.filter(merge => {
-        // Must be a weight move (same age category)
-        if (!merge.type || !merge.type.includes('Weight move-up')) return false;
-
-        // Target must be a single-athlete category
-        const targetCat = categories[merge.category];
-        if (!targetCat || targetCat.length !== 1) return false;
-
-        // Target single athlete must not already have a recommendation to move elsewhere
-        if (recommendations[merge.category]) return false;
-
-        return true;
-      });
-
-      if (viableTargets.length > 0) {
-        // Pick the closest weight move-UP (must be higher weight)
-        // Filter to only include targets with higher weight than current
-        const upwardTargets = viableTargets.filter(merge => {
-          const targetWeight = parseCategoryForSort(merge.category).weight;
-          return targetWeight > parsed.weight;
-        });
-
-        if (upwardTargets.length === 0) {
-          log('  ⚠️  No upward weight targets available for', twoCat);
-          return; // Skip this 2-athlete bracket - can't move down
-        }
-
-        upwardTargets.sort((a, b) => {
-          const weightA = parseCategoryForSort(a.category).weight;
-          const weightB = parseCategoryForSort(b.category).weight;
-          return (weightA - parsed.weight) - (weightB - parsed.weight); // Closest weight UP
-        });
-
-        const bestTarget = upwardTargets[0];
-
-        log(`  ✓ Found opportunity: Move 2-athlete bracket ${twoCat} up to join single in ${bestTarget.category}`);
-
-        // Create recommendations for BOTH athletes in the 2-athlete bracket
-        athletes.forEach((athlete, idx) => {
-          recommendations[twoCat + `::pair${idx}`] = {
-            merge: bestTarget,
-            score: 120, // High score - this creates a 3-person bracket!
-            reason: '2-athlete bracket moving up to create 3-person bracket',
-            isPairMove: true,
-            pairCategory: twoCat
-          };
-        });
-
-        // Mark the target as used
-        targets.add(bestTarget.category);
-      }
-    });
-
-    log('✅ Step 4 complete');
-  }
+  log('✅ Step 4 complete: Found', Object.keys(recommendations).length - used.size / 2, 'moves to multi-athlete brackets');
 
   log('✅ Optimization complete:', Object.keys(recommendations).length, 'total recommendations');
   log('   📍 Pairings between singles:', used.size / 2);
