@@ -804,7 +804,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.5.1"; // Fix: Extract gender from Entry field when Gender column is empty
+const APP_VERSION = "3.5.2"; // Fix: Global optimizer now returns targets map to prevent undefined error
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2787,10 +2787,26 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
 
     if (globalResult && globalResult.recommendations) {
       log('✅ Using global optimizer result');
+
+      // Build targets map from global optimizer recommendations
+      const targets = new Map();
+      Object.keys(globalResult.recommendations).forEach(sourceCat => {
+        const rec = globalResult.recommendations[sourceCat];
+        const targetCat = rec.merge.category;
+
+        if (!targets.has(targetCat)) {
+          targets.set(targetCat, []);
+        }
+        targets.get(targetCat).push({
+          from: sourceCat,
+          athlete: categories[sourceCat][0]
+        });
+      });
+
       return {
         recommendations: globalResult.recommendations,
         pairRecommendations: {},
-        incomingTargets: new Map()
+        targets: targets
       };
     }
 
