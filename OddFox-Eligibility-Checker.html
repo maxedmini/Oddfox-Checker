@@ -804,7 +804,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.4.2"; // Fix: prevent suggesting moves to brackets that will be emptied
+const APP_VERSION = "3.5.0"; // Feature: Global merge optimization (evaluates scenarios to minimize singles)
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2596,7 +2596,181 @@ function changeSortOrder(sortType) {
 }
 
 /** =========================
- *  SMART MERGE OPTIMIZER
+ *  GLOBAL MERGE OPTIMIZER
+ *  ========================= */
+
+/**
+ * Simulate a scenario by applying a set of moves and count resulting singles
+ * @param {Object} categories - Category map (category name -> athletes array)
+ * @param {Array} moves - Array of {from: categoryName, to: categoryName} moves
+ * @returns {number} Number of single-athlete categories after applying moves
+ */
+function simulateScenario(categories, moves) {
+  // Create a deep copy of categories to simulate
+  const simulated = {};
+  for (const [catName, athletes] of Object.entries(categories)) {
+    simulated[catName] = [...athletes];
+  }
+
+  // Apply each move
+  moves.forEach(move => {
+    const fromCat = move.from;
+    const toCat = move.to;
+
+    if (simulated[fromCat] && simulated[fromCat].length > 0 && simulated[toCat]) {
+      // Move athlete from source to target
+      const athlete = simulated[fromCat][0]; // Take first athlete
+      simulated[toCat].push(athlete);
+      simulated[fromCat].shift(); // Remove from source
+    }
+  });
+
+  // Count remaining singles
+  let singlesCount = 0;
+  for (const athletes of Object.values(simulated)) {
+    if (athletes.length === 1) {
+      singlesCount++;
+    }
+  }
+
+  return singlesCount;
+}
+
+/**
+ * Generate and evaluate multiple merge scenarios to find optimal global solution
+ * @param {Array} singleCategories - Array of single-athlete category names
+ * @param {Object} categories - Category map
+ * @param {number} currentYear - Current year
+ * @param {string} beltHandlingMode - How to handle belts
+ * @param {Object} duplicateRestrictions - Duplicate restrictions
+ * @param {boolean} allowGenderMergeU12 - Allow cross-gender for U8-U12
+ * @param {boolean} useExactDOB - Use exact DOB matching
+ * @returns {Object|null} Best scenario with recommendations, or null to use greedy approach
+ */
+function findOptimalMergeScenario(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB) {
+  log('🌍 Global Optimizer: Evaluating merge scenarios...');
+
+  // Step 1: Build move options for each single
+  const moveOptions = {};
+  singleCategories.forEach(catName => {
+    const athlete = categories[catName][0];
+    const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
+
+    // Filter to valid targets (exclude other singles and check rules)
+    moveOptions[catName] = result.merges.filter(merge => {
+      // Must have 2+ athletes (don't move single to another single)
+      return categories[merge.category] && categories[merge.category].length >= 2;
+    });
+  });
+
+  // If no moves possible, return null
+  const totalPossibleMoves = Object.values(moveOptions).reduce((sum, opts) => sum + opts.length, 0);
+  if (totalPossibleMoves === 0) {
+    log('  No possible moves found');
+    return null;
+  }
+
+  // Step 2: Generate scenarios
+  const scenarios = [];
+
+  // Scenario 1: Do nothing (baseline)
+  scenarios.push({
+    moves: [],
+    score: singleCategories.length,
+    description: 'No merges'
+  });
+
+  // Scenario 2: Each single takes their first valid move (if available)
+  const firstMoveScenario = [];
+  singleCategories.forEach(catName => {
+    if (moveOptions[catName] && moveOptions[catName].length > 0) {
+      firstMoveScenario.push({
+        from: catName,
+        to: moveOptions[catName][0].category
+      });
+    }
+  });
+
+  if (firstMoveScenario.length > 0) {
+    const score = simulateScenario(categories, firstMoveScenario);
+    scenarios.push({
+      moves: firstMoveScenario,
+      score: score,
+      description: 'All singles take first available move'
+    });
+  }
+
+  // Scenario 3-N: Try different combinations for each single (limit combinatorial explosion)
+  // For each single, try each of their move options in different combinations
+  if (singleCategories.length <= 5) {  // Only try combinations if not too many singles
+    singleCategories.forEach((catName, idx) => {
+      if (moveOptions[catName]) {
+        moveOptions[catName].forEach((moveOption, moveIdx) => {
+          // Create scenario where this single takes this specific move, others take first move
+          const combinationScenario = [];
+
+          singleCategories.forEach((otherCat, otherIdx) => {
+            if (otherIdx === idx) {
+              // This is the single we're varying - use specific move
+              combinationScenario.push({
+                from: catName,
+                to: moveOption.category
+              });
+            } else {
+              // Other singles take their first move
+              if (moveOptions[otherCat] && moveOptions[otherCat].length > 0) {
+                combinationScenario.push({
+                  from: otherCat,
+                  to: moveOptions[otherCat][0].category
+                });
+              }
+            }
+          });
+
+          if (combinationScenario.length > 0) {
+            const score = simulateScenario(categories, combinationScenario);
+            scenarios.push({
+              moves: combinationScenario,
+              score: score,
+              description: `${catName} to ${moveOption.category} (option ${moveIdx + 1})`
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // Step 3: Find best scenario
+  scenarios.sort((a, b) => a.score - b.score); // Lower score = fewer singles = better
+  const best = scenarios[0];
+
+  log(`  Evaluated ${scenarios.length} scenarios`);
+  log(`  Best scenario: ${best.description} → ${best.score} remaining singles`);
+
+  if (best.moves.length === 0) {
+    return null; // No improvement possible
+  }
+
+  // Convert moves to recommendations format
+  const recommendations = {};
+  best.moves.forEach(move => {
+    const athlete = categories[move.from][0];
+    const mergeOption = moveOptions[move.from].find(m => m.category === move.to);
+
+    if (mergeOption) {
+      recommendations[move.from] = {
+        merge: mergeOption,
+        score: 100,
+        reason: 'Global optimization: Minimizes total singles'
+      };
+    }
+  });
+
+  return { recommendations, score: best.score };
+}
+
+/** =========================
+ *  SMART MERGE OPTIMIZER (GREEDY)
  *  ========================= */
 function optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions = null, allowGenderMergeU12 = false, useExactDOB = false, minBracketSize3 = false) {
   const categoryLabel = singleCategories.length === 1 && categories[singleCategories[0]].length === 2
@@ -2605,6 +2779,22 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
   log('🧠 Smart Merge Optimizer: Starting optimization for', singleCategories.length, categoryLabel);
   if (minBracketSize3) {
     log('  ⚠️ Min bracket size 3 enabled - prioritizing 3+ person brackets');
+  }
+
+  // TRY GLOBAL OPTIMIZER FIRST (only for singles, not for minBracketSize3 mode)
+  if (!minBracketSize3 && singleCategories.length > 0) {
+    const globalResult = findOptimalMergeScenario(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
+
+    if (globalResult && globalResult.recommendations) {
+      log('✅ Using global optimizer result');
+      return {
+        recommendations: globalResult.recommendations,
+        pairRecommendations: {},
+        incomingTargets: new Map()
+      };
+    }
+
+    log('  Global optimizer found no improvement, falling back to greedy approach');
   }
 
   const recommendations = {}; // category -> { merge, score, reason }
