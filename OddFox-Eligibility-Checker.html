@@ -4799,6 +4799,15 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       html += '  <div class="csv-tab-count">' + uniqueLonelyAthletes + '</div>';
       html += '</div>';
     }
+
+    // Mixed Gender tab (shown when cross-gender merges are enabled and available)
+    const mixedMerges = withMerges.filter(m => m.merges && m.merges.some(merge => merge.isMixed));
+    if (mixedMerges.length > 0) {
+      html += '<div class="csv-tab" data-tab="tab-mixed" onclick="switchCSVTab(\'tab-mixed\')">';
+      html += '  <div class="csv-tab-title">⚥ Mixed Gender</div>';
+      html += '  <div class="csv-tab-count">' + mixedMerges.length + '</div>';
+      html += '</div>';
+    }
   } else {
     if (withMerges.length > 0) {
       html += '<div class="csv-tab active" data-tab="tab-allmerges" onclick="switchCSVTab(\'tab-allmerges\')">';
@@ -4966,6 +4975,24 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
     });
 
     html += '</div>';
+  }
+
+  // Tab content: Mixed Gender Merges
+  if (useSmartRecommendations) {
+    const mixedMerges = withMerges.filter(m => m.merges && m.merges.some(merge => merge.isMixed));
+    if (mixedMerges.length > 0) {
+      html += '<div id="tab-mixed" class="csv-tab-content">';
+      html += '<div style="padding: 12px; background: #1e293b; border-left: 3px solid #f59e0b; border-radius: 4px; margin-bottom: 16px;">';
+      html += '  <div style="font-size: 12px; color: #fbbf24; font-weight: 600;">⚥ Mixed Gender Merges (U8-U12 Only)</div>';
+      html += '  <div style="font-size: 11px; color: #fef3c7; margin-top: 4px;">Cross-gender merge opportunities for youth categories. These merges require regulatory approval.</div>';
+      html += '</div>';
+
+      mixedMerges.forEach(item => {
+        html += renderCategoryItem(item, false);
+      });
+
+      html += '</div>';
+    }
   }
 
   // Tab content: Age + Weight Only
