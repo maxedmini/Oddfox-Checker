@@ -804,7 +804,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.5.2"; // Fix: Global optimizer now returns targets map to prevent undefined error
+const APP_VERSION = "3.5.3"; // Fix: Detect pair recommendations in minBracketSize3 mode to prevent circular suggestions
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2781,8 +2781,10 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     log('  ⚠️ Min bracket size 3 enabled - prioritizing 3+ person brackets');
   }
 
-  // TRY GLOBAL OPTIMIZER FIRST (only for singles, not for minBracketSize3 mode)
-  if (!minBracketSize3 && singleCategories.length > 0) {
+  // TRY GLOBAL OPTIMIZER FIRST (for singles only in regular mode)
+  // NOTE: Currently disabled for minBracketSize3 mode due to complexity with pair recommendations
+  // TODO: Extend global optimizer to handle pair moves in minBracketSize3 mode
+  if (singleCategories.length > 0 && !minBracketSize3) {
     const globalResult = findOptimalMergeScenario(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
 
     if (globalResult && globalResult.recommendations) {
@@ -3035,10 +3037,13 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
       if (targetAthletes.length >= 2) {
         // Count how many athletes in this category have recommendations to move elsewhere
         let athletesMovingOut = 0;
-        targetAthletes.forEach(targetAthlete => {
+        targetAthletes.forEach((targetAthlete, idx) => {
           // Check if this specific athlete has a recommendation
+          // In minBracketSize3 mode, check for ::pair0, ::pair1 suffixes
           const athleteCategory = targetAthlete.group;
-          if (recommendations[athleteCategory]) {
+          const pairKey = athleteCategory + `::pair${idx}`;
+
+          if (recommendations[athleteCategory] || recommendations[pairKey]) {
             athletesMovingOut++;
           }
         });
