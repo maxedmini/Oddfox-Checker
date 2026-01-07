@@ -804,7 +804,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.5.3"; // Fix: Detect pair recommendations in minBracketSize3 mode to prevent circular suggestions
+const APP_VERSION = "3.5.4"; // Heuristic: Prioritize singles joining 2-person brackets in minBracketSize3 mode
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -3105,6 +3105,15 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
         } else {
           score += 5; // Small bonus - only use if no 3+ options available
           reason += ' • Creates ' + resultingSize + '-person bracket (fallback)';
+        }
+
+        // HEURISTIC: Give very high priority to singles joining 2-person brackets
+        // This helps 2-person brackets reach the minimum size of 3
+        // Example: Sara (single in -32kg) should prefer moving up to join Macey & Thea (2 in -36kg)
+        // rather than waiting for others to move down to her
+        if (merge.athleteCount === 2) {
+          score += 100; // Very high priority - helps 2-person bracket reach min 3
+          reason += ' • Helps 2-person bracket reach minimum size';
         }
       } else {
         // Standard scoring when min bracket size 3 is not enabled
