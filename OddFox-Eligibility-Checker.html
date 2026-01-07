@@ -4896,6 +4896,40 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       itemHtml += '    <div style="font-size: 12px; color: #c084fc; font-weight: 600; margin-bottom: 4px;">🥊 SECOND MATCH AVAILABLE:</div>';
       itemHtml += '    <div style="font-size: 11px; color: #cbd5e1;">An athlete from an existing bracket could take a second match here. Check the Second Match tab for details.</div>';
       itemHtml += '  </div>';
+    } else if (item.recommendation && (!item.merges || item.merges.length === 0)) {
+      // Has a recommendation but no other merge options (e.g., pair recommendations)
+      itemHtml += '  <div class="merge-options">';
+      itemHtml += '    <div class="merge-label" style="color: #10b981; font-weight: 600;">✨ RECOMMENDED MERGE:</div>';
+      const rec = item.recommendation.merge;
+      const escapedCategory = rec.category.replace(/'/g, "&apos;");
+      const mergeId = 'merge-rec-' + item.category.replace(/[^a-zA-Z0-9]/g, '-');
+      itemHtml += '    <div class="merge-category" id="' + mergeId + '" style="border-left: 4px solid #10b981;">';
+      itemHtml += '      <div class="merge-category-content" onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\')">';
+      itemHtml += '        <div class="merge-text">' + rec.category;
+      if (rec.isMixed) {
+        itemHtml += ' <span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">MIXED</span>';
+      }
+      if (rec.isDOBBased) {
+        itemHtml += ' <span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">DOB-MATCHED</span>';
+      }
+      itemHtml += ' <button onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\'); event.stopPropagation();" style="display: inline; width: auto; padding: 4px 8px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: background 0.2s; vertical-align: baseline;" onmouseover="this.style.background=\'#059669\'" onmouseout="this.style.background=\'#10b981\'">📋</button></div>';
+      itemHtml += '        <div class="merge-type">' + rec.type + ' • ' + rec.athleteCount + ' athletes</div>';
+      itemHtml += generateAthleteListDropdown(rec.category, item.athlete, mergeId + '-athletes');
+      itemHtml += '        <div style="color: #64748b; font-size: 11px; margin-top: 4px;">' + item.recommendation.reason + '</div>';
+      if (rec.warning) {
+        itemHtml += '        <div style="color: #f59e0b; font-size: 11px; margin-top: 4px; font-weight: 500;">' + rec.warning + '</div>';
+      }
+      if (rec.isMixed) {
+        itemHtml += '        <div style="background: #fee2e2; border-left: 3px solid #dc2626; padding: 8px; margin-top: 8px; font-size: 11px; color: #dc2626; border-radius: 4px;"><strong>⚠️ REGULATORY CHECK REQUIRED</strong><br>This merge combines male and female athletes. Verify competition rules permit mixed divisions for this age group.</div>';
+      }
+      itemHtml += '      </div>';
+      itemHtml += '      <div class="merge-actions">';
+      itemHtml += '        <label style="font-size: 11px; color: #64748b; cursor: pointer; user-select: none; display: inline-flex; align-items: center;">';
+      itemHtml += '          <input type="checkbox" class="merge-checkbox" onchange="toggleMergeComplete(\'' + mergeId + '\', \'' + escapedCategory + '\')" style="margin-right: 4px; cursor: pointer;"><span style="white-space: nowrap;">Done</span>';
+      itemHtml += '        </label>';
+      itemHtml += '      </div>';
+      itemHtml += '    </div>';
+      itemHtml += '  </div>';
     } else if (item.merges && item.merges.length > 0) {
       itemHtml += '  <div class="merge-options">';
 
