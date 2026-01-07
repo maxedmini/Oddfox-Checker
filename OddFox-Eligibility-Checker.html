@@ -3240,9 +3240,46 @@ function analyzeCSV() {
         allMergeResults.set(catName, { athlete, result });
       });
 
-      // Second pass: Check for potential incoming merges
-      singleCategories.forEach(catName => {
-        const { athlete, result } = allMergeResults.get(catName);
+      // Extract pair recommendations (athletes from 2-person brackets with recommendations)
+      // These were created in Step 3 of optimizeMerges when minBracketSize3 is enabled
+      Object.keys(recommendations).forEach(recKey => {
+        // Check if this is a pair recommendation (contains ::pair)
+        if (recKey.includes('::pair')) {
+          const rec = recommendations[recKey];
+          // Extract the original category name (before ::pair0 or ::pair1)
+          const pairCategory = rec.pairCategory;
+          const pairIndex = parseInt(recKey.split('::pair')[1]);
+
+          if (categories[pairCategory] && categories[pairCategory][pairIndex]) {
+            const athlete = categories[pairCategory][pairIndex];
+            // Add this athlete to allMergeResults with their recommendation
+            allMergeResults.set(recKey, {
+              athlete,
+              result: { merges: [], reasons: [], blockedByDuplicate: [] },
+              isPairRecommendation: true,
+              originalCategory: pairCategory
+            });
+          }
+        }
+      });
+
+      // Second pass: Check for potential incoming merges (process all entries including pair recommendations)
+      allMergeResults.forEach((data, catName) => {
+        const { athlete, result, isPairRecommendation, originalCategory } = data;
+
+        // Handle pair recommendations specially - they always have a recommendation
+        if (isPairRecommendation) {
+          const recommendation = recommendations[catName];
+          withMerges.push({
+            category: originalCategory, // Show original category name
+            athlete,
+            merges: [], // No other merge options
+            recommendation,
+            requiresConfirmation: false,
+            isIncomingTarget: false
+          });
+          return; // Skip rest of processing for this athlete
+        }
 
         // Check if this category is a target of a smart recommendation
         const isRecommendationTarget = recommendationTargets.has(catName);
