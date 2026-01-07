@@ -804,7 +804,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.5.4"; // Heuristic: Prioritize singles joining 2-person brackets in minBracketSize3 mode
+const APP_VERSION = "3.5.5"; // Fix: Global optimizer now includes single-to-single pairing (restores original behavior)
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2656,10 +2656,11 @@ function findOptimalMergeScenario(singleCategories, categories, currentYear, bel
     const athlete = categories[catName][0];
     const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
 
-    // Filter to valid targets (exclude other singles and check rules)
+    // Include all valid targets:
+    // - Multi-athlete brackets (2+ athletes)
+    // - Other singles (for single-to-single pairing)
     moveOptions[catName] = result.merges.filter(merge => {
-      // Must have 2+ athletes (don't move single to another single)
-      return categories[merge.category] && categories[merge.category].length >= 2;
+      return categories[merge.category] && categories[merge.category].length >= 1;
     });
   });
 
