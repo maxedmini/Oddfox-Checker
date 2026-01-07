@@ -771,6 +771,11 @@
                 <input type="checkbox" id="useExactDOB" onchange="reanalyzeIfLoaded()" style="cursor: pointer; width: 16px; height: 16px;">
                 <span style="font-size: 13px; color: #1e293b; font-weight: 500;">Use exact DOB matching (2-year span)</span>
               </label>
+
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Ensure all brackets have at least 3 athletes by merging smaller categories">
+                <input type="checkbox" id="minBracketSize3" onchange="reanalyzeIfLoaded()" style="cursor: pointer; width: 16px; height: 16px;">
+                <span style="font-size: 13px; color: #1e293b; font-weight: 500;">Minimum bracket size of 3</span>
+              </label>
             </div>
 
             <div id="advancedWarning" style="display: none; background: #fef3c7; border-left: 3px solid #f59e0b; padding: 8px; margin-top: 10px; font-size: 11px; color: #92400e; border-radius: 4px; line-height: 1.4;">
@@ -2593,8 +2598,11 @@ function changeSortOrder(sortType) {
 /** =========================
  *  SMART MERGE OPTIMIZER
  *  ========================= */
-function optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions = null) {
-  log('🧠 Smart Merge Optimizer: Starting optimization for', singleCategories.length, 'single-athlete categories');
+function optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions = null, allowGenderMergeU12 = false, useExactDOB = false) {
+  const categoryLabel = singleCategories.length === 1 && categories[singleCategories[0]].length === 2
+    ? 'categories with < 3 athletes'
+    : 'single-athlete categories';
+  log('🧠 Smart Merge Optimizer: Starting optimization for', singleCategories.length, categoryLabel);
 
   const recommendations = {}; // category -> { merge, score, reason }
   const used = new Set(); // Track which singles have been paired
@@ -2790,7 +2798,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
 /** =========================
  *  SECOND MATCH OPTIMIZER
  *  ========================= */
-function findSecondMatches(singleCategories, categories, currentYear, beltHandlingMode, recommendations, targets, duplicateRestrictions = null) {
+function findSecondMatches(singleCategories, categories, currentYear, beltHandlingMode, recommendations, targets, duplicateRestrictions = null, allowGenderMergeU12 = false, useExactDOB = false) {
   log('🥊 Second Match Finder: Checking for athletes who could fight twice to help remaining singles');
 
   const secondMatches = []; // Array of { helper: catName, helperAthlete, firstMatch, secondMatch, lonely }
@@ -3068,6 +3076,7 @@ function analyzeCSV() {
       // Read advanced merge options
       const allowGenderMergeU12 = document.getElementById('allowGenderMergeU12')?.checked || false;
       const useExactDOB = document.getElementById('useExactDOB')?.checked || false;
+      const minBracketSize3 = document.getElementById('minBracketSize3')?.checked || false;
 
       // Validate DOB availability when option is enabled
       if (useExactDOB) {
@@ -3082,11 +3091,15 @@ function analyzeCSV() {
         }
       }
 
-      // Find single-athlete categories
-      const singleCategories = Object.keys(categories).filter(cat => categories[cat].length === 1);
+      // Find categories that need merging based on minimum bracket size
+      const minSize = minBracketSize3 ? 3 : 1;
+      const singleCategories = Object.keys(categories).filter(cat => categories[cat].length < minSize);
 
       if (singleCategories.length === 0) {
-        resultsDiv.innerHTML = '<div class="info-badge">✓ No single-athlete categories found. All categories have multiple athletes!</div>';
+        const message = minBracketSize3
+          ? '✓ All categories have at least 3 athletes!'
+          : '✓ No single-athlete categories found. All categories have multiple athletes!';
+        resultsDiv.innerHTML = '<div class="info-badge">' + message + '</div>';
         return;
       }
 
@@ -3103,7 +3116,7 @@ function analyzeCSV() {
       let recommendationTargets = new Set(); // Track categories that are targets of recommendations
       let secondMatches = [];
 
-      const optimizerResult = optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions);
+      const optimizerResult = optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
       recommendations = optimizerResult.recommendations;
       recommendationTargets = optimizerResult.targets;
       log('🎯 Smart Recommendations:', Object.keys(recommendations).length, 'recommendations generated');
@@ -3114,7 +3127,7 @@ function analyzeCSV() {
       const includeSecondMatches = secondMatchToggle ? secondMatchToggle.checked : true; // Default to true if checkbox not yet rendered
 
       if (includeSecondMatches) {
-        secondMatches = findSecondMatches(singleCategories, categories, currentYear, beltHandlingMode, recommendations, recommendationTargets, duplicateRestrictions);
+        secondMatches = findSecondMatches(singleCategories, categories, currentYear, beltHandlingMode, recommendations, recommendationTargets, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
         log('🥊 Second Matches:', secondMatches.length, 'opportunities found');
       }
 
