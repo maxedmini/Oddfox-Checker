@@ -3136,17 +3136,21 @@ function analyzeCSV() {
       const ageAndWeightOnly = [];
       const withoutMerges = [];
 
-      // First pass: Build merge options for ALL singles (including moved entries)
+      // First pass: Build merge options for ALL athletes in categories below minimum size
       const allMergeResults = new Map();
       singleCategories.forEach(catName => {
-        const athlete = categories[catName][0];
-        const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
-        allMergeResults.set(catName, { athlete, result });
+        const athletesInCategory = categories[catName];
+        // Process each athlete in the category
+        athletesInCategory.forEach((athlete, idx) => {
+          const athleteKey = catName + (athletesInCategory.length > 1 ? `::${idx}` : '');
+          const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
+          allMergeResults.set(athleteKey, { athlete, result, category: catName });
+        });
       });
 
       // Second pass: Check for potential incoming merges
-      singleCategories.forEach(catName => {
-        const { athlete, result } = allMergeResults.get(catName);
+      for (const [athleteKey, athleteData] of allMergeResults) {
+        const { athlete, result, category: catName } = athleteData;
 
         // Check if this category is a target of a smart recommendation
         const isRecommendationTarget = recommendationTargets.has(catName);
@@ -3231,7 +3235,7 @@ function analyzeCSV() {
             }
           }
         }
-      });
+      }
 
       // Sort results using default order
       sortCSVResults(withMerges, 'default');
