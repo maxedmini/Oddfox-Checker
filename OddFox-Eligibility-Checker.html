@@ -3958,21 +3958,45 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
 
         // Skip if this is the same as original category
         if (fullCategory !== athlete.group) {
-          // Check if this category exists and has multiple athletes (excluding current athlete)
-          const athleteCount = getCategoryCount(fullCategory, allCategories, athlete);
-          console.log('    Athletes in', fullCategory + ':', athleteCount, '(excluding current athlete)');
+          // CRITICAL: Only suggest moving to a weight class if it's not LIGHTER than registered weight
+          // Athletes can register in a heavier class than their weight suggests, but they can't move DOWN to a lighter class
+          // Extract registered weight from athlete.group
+          const registeredWeightMatch = athlete.group.match(/[-+]\s*(\d+)\s*kg/);
+          const isRegisteredPlus = athlete.group.includes('(+)');
 
-          if (athleteCount >= 1) {
-            console.log('    -> Adding as merge option (own weight)');
-            addMerge({
-              category: fullCategory,
-              type: reason,
-              isWeightMoveUp: false,
-              athleteCount: athleteCount
-            });
-          } else {
-            console.log('    -> Skipping (no athletes in target category)');
-            reasons.push('No athletes in ' + fullCategory);
+          let shouldSkipLighterWeight = false;
+          if (registeredWeightMatch) {
+            const registeredWeight = parseInt(registeredWeightMatch[1]);
+
+            // Check if suggested weight is lighter than registered weight
+            if (isRegisteredPlus && wc.own.type === "minus") {
+              // Registered in plus weight, suggesting minus weight = moving DOWN (not allowed)
+              shouldSkipLighterWeight = true;
+              console.log('    -> Skipping: Cannot move from plus weight to minus weight (down)');
+            } else if (wc.own.type === "minus" && wc.own.value < registeredWeight) {
+              // Both minus weights, but suggested is lighter (not allowed)
+              shouldSkipLighterWeight = true;
+              console.log('    -> Skipping: Cannot move to lighter weight class', wc.own.value, '<', registeredWeight);
+            }
+          }
+
+          if (!shouldSkipLighterWeight) {
+            // Check if this category exists and has multiple athletes (excluding current athlete)
+            const athleteCount = getCategoryCount(fullCategory, allCategories, athlete);
+            console.log('    Athletes in', fullCategory + ':', athleteCount, '(excluding current athlete)');
+
+            if (athleteCount >= 1) {
+              console.log('    -> Adding as merge option (own weight)');
+              addMerge({
+                category: fullCategory,
+                type: reason,
+                isWeightMoveUp: false,
+                athleteCount: athleteCount
+              });
+            } else {
+              console.log('    -> Skipping (no athletes in target category)');
+              reasons.push('No athletes in ' + fullCategory);
+            }
           }
         }
       }
