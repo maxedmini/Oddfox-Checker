@@ -2606,7 +2606,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     const parsed1 = parseCategoryForSort(cat1);
 
     // Get merge options for athlete1
-    const result1 = findMergeOptions(athlete1, currentYear, categories, beltHandlingMode, duplicateRestrictions);
+    const result1 = findMergeOptions(athlete1, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
 
     // Check if athlete1 can merge to any other single's category
     for (let j = 0; j < singleCategories.length; j++) {
@@ -2690,7 +2690,7 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     if (used.has(catName)) return; // Already has a recommendation
 
     const athlete = categories[catName][0];
-    const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions);
+    const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
 
     if (result.merges.length === 0) {
       return; // No merges available
@@ -2800,7 +2800,7 @@ function findSecondMatches(singleCategories, categories, currentYear, beltHandli
 
     // Check if this athlete has any merge options available
     const athlete = categories[cat][0];
-    const mergeOptions = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions);
+    const mergeOptions = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
 
     // If they have merge options, they're not truly lonely
     if (mergeOptions.merges.length > 0) {
@@ -2854,7 +2854,7 @@ function findSecondMatches(singleCategories, categories, currentYear, beltHandli
       const { category: matchedCategory, athlete: matchedAthlete, source } = matchedInfo;
 
       // Find merge options for this athlete
-      const mergeOptions = findMergeOptions(matchedAthlete, currentYear, categories, beltHandlingMode, duplicateRestrictions);
+      const mergeOptions = findMergeOptions(matchedAthlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
 
       // Can they merge to the lonely athlete's category?
       const canHelp = mergeOptions.merges.find(m => m.category === lonelyCategory);
@@ -3122,7 +3122,7 @@ function analyzeCSV() {
       const allMergeResults = new Map();
       singleCategories.forEach(catName => {
         const athlete = categories[catName][0];
-        const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions);
+        const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
         allMergeResults.set(catName, { athlete, result });
       });
 
@@ -3517,10 +3517,18 @@ function detectDuplicateAthletes(allCategories) {
   return { duplicateMap, multiDisciplineMap };
 }
 
-function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 'keep', duplicateRestrictions = null) {
+function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 'keep', duplicateRestrictions = null, allowGenderMergeU12 = false, useExactDOB = false) {
   const merges = [];
   const reasons = []; // Track why no merges are available
   const blockedByDuplicate = []; // Track suggestions blocked by duplicate entry rule
+
+  // Parse birth date for exact DOB matching if enabled
+  let athleteBirthDate = null;
+  let exactAge = null;
+  if (useExactDOB && athlete.birthDate) {
+    athleteBirthDate = parseBirthDate(athlete.birthDate);
+    exactAge = calculateExactAge(athleteBirthDate, eventYear);
+  }
 
   // Parse weight from either Weighin weight or WEIGHT column
   let weight = 0;
