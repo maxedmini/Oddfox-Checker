@@ -804,7 +804,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.4.0"; // Add foundation for advanced merge options: cross-gender U8-U12 and DOB matching
+const APP_VERSION = "3.4.1"; // Fix: dropdown event handling and accordion behavior
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -3508,7 +3508,7 @@ function generateAthleteListDropdown(mergeCategory, currentAthlete, dropdownId) 
 
   let html = '';
   html += '<div style="margin-top: 8px;">';
-  html += '  <button onclick="toggleAthleteList(\'' + dropdownId + '\'); event.stopPropagation();" class="athlete-dropdown-btn" style="background: transparent; color: #94a3b8; border: 1px solid #475569; padding: 4px 12px; font-size: 11px; cursor: pointer; border-radius: 4px; transition: all 0.2s;">';
+  html += '  <button onclick="toggleAthleteList(\'' + dropdownId + '\', event)" class="athlete-dropdown-btn" style="background: transparent; color: #94a3b8; border: 1px solid #475569; padding: 4px 12px; font-size: 11px; cursor: pointer; border-radius: 4px; transition: all 0.2s;">';
   html += '    <span id="' + dropdownId + '-icon">▶</span> Show athletes in this category (' + athletes.length + ')';
   html += '  </button>';
   html += '  <div id="' + dropdownId + '" style="display: none; margin-top: 8px; padding: 8px; background: #0f172a; border-radius: 4px; border: 1px solid #334155;">';
@@ -5711,13 +5711,34 @@ function copyAthleteName(name) {
 /**
  * Toggle athlete list dropdown visibility
  * @param {string} dropdownId - ID of the dropdown to toggle
+ * @param {Event} event - Event object to stop propagation
  */
-function toggleAthleteList(dropdownId) {
+function toggleAthleteList(dropdownId, event) {
+  // CRITICAL: Stop event from bubbling to parent elements (prevents copy action)
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+
   const dropdown = document.getElementById(dropdownId);
   const icon = document.getElementById(dropdownId + '-icon');
 
   if (dropdown) {
     const isHidden = dropdown.style.display === 'none';
+
+    // Close all other athlete dropdowns first (accordion behavior)
+    document.querySelectorAll('[id$="-athletes"]').forEach(otherDropdown => {
+      if (otherDropdown.id !== dropdownId && otherDropdown.style.display === 'block') {
+        otherDropdown.style.display = 'none';
+        const otherId = otherDropdown.id;
+        const otherIcon = document.getElementById(otherId + '-icon');
+        if (otherIcon) {
+          otherIcon.textContent = '▶';
+        }
+      }
+    });
+
+    // Toggle current dropdown
     dropdown.style.display = isHidden ? 'block' : 'none';
     if (icon) {
       icon.textContent = isHidden ? '▼' : '▶';
