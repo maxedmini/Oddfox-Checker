@@ -4134,6 +4134,90 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
     }
   }
 
+  // Cross-gender merge logic for U8/U10/U12 when enabled
+  if (allowGenderMergeU12) {
+    const youthCategories = ['U8', 'U10', 'U12'];
+    const oppositeGender = gender === 'MALE' ? 'FEMALE' : 'MALE';
+
+    console.log('Checking cross-gender merges for', athlete.name, '(allowGenderMergeU12 enabled)');
+
+    // Check each youth category
+    cats.forEach((cat, idx) => {
+      if (!youthCategories.includes(cat.n)) {
+        return; // Skip non-youth categories
+      }
+
+      console.log('  Cross-gender check for', cat.n);
+
+      // Get unified weight table for MIXED category
+      const mixedTable = getUnifiedWeightTable(cat.n);
+      if (!mixedTable || mixedTable.length === 0) {
+        console.log('    No unified weight table for', cat.n);
+        return;
+      }
+
+      // Only check same age category for cross-gender (idx === 0)
+      if (idx === 0) {
+        const wc = getOwnAndUpWeightClasses(weight, mixedTable);
+        console.log('    Mixed weight classes:', wc);
+
+        if (wc.own) {
+          // Generate MIXED category label
+          const categoryLabel = formatCategoryLabel(cat, 'MIXED', disciplineKey);
+          const ageDisplay = formatAgeDisplay(cat.n);
+          const weightDisplay = wc.own.type === "plus"
+            ? "(+)" + wc.own.value + " kg"
+            : "-" + wc.own.value + " kg";
+
+          let fullCategory = categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
+
+          // Check if this category has athletes (from either gender)
+          const athleteCount = getCategoryCount(fullCategory, allCategories, athlete);
+          console.log('    Athletes in', fullCategory + ':', athleteCount);
+
+          if (athleteCount >= 1) {
+            console.log('    -> Adding MIXED category merge option');
+            addMerge({
+              category: fullCategory,
+              type: 'Same category (different weight) - MIXED',
+              athlete: athlete,
+              isMixed: true,
+              requiresWeightCheck: wc.own.type === "plus",
+              warning: wc.own.type === "plus" ? "⚠️ Please check actual weight is below -" + wc.own.value + " kg" : undefined
+            });
+          }
+        }
+
+        // Also check weight move-ups in MIXED category
+        if (wc.up && wc.up.length > 0) {
+          wc.up.forEach(upWeight => {
+            const weightDisplay = upWeight.type === "plus"
+              ? "(+)" + upWeight.value + " kg"
+              : "-" + upWeight.value + " kg";
+
+            const categoryLabel = formatCategoryLabel(cat, 'MIXED', disciplineKey);
+            const ageDisplay = formatAgeDisplay(cat.n);
+            let fullCategory = categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
+
+            const athleteCount = getCategoryCount(fullCategory, allCategories, athlete);
+
+            if (athleteCount >= 1) {
+              console.log('    -> Adding MIXED weight move-up');
+              addMerge({
+                category: fullCategory,
+                type: 'Weight move-up - MIXED',
+                athlete: athlete,
+                isMixed: true,
+                requiresWeightCheck: upWeight.type === "plus",
+                warning: upWeight.type === "plus" ? "⚠️ Please check actual weight is below -" + upWeight.value + " kg" : undefined
+              });
+            }
+          });
+        }
+      }
+    });
+  }
+
   if (merges.length > 0) {
     console.log('Found', merges.length, 'merges for', athlete.name);
   }
@@ -4144,13 +4228,13 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
 /**
  * Format category label for display
  * @param {Object} cat - Age category object
- * @param {string} gender - Gender (MALE/FEMALE)
+ * @param {string} gender - Gender (MALE/FEMALE/MIXED)
  * @param {string} disciplineKey - Discipline key
  * @returns {string} Formatted category label
  */
 function formatCategoryLabel(cat, gender, disciplineKey) {
   if (disciplineKey === "BABY_MONKEYS") {
-    const genderLabel = gender === "MALE" ? "Boys" : "Girls";
+    const genderLabel = gender === "MALE" ? "Boys" : (gender === "FEMALE" ? "Girls" : "Mixed");
     return "Baby Monkeys Sumo - " + genderLabel;
   } else if (disciplineKey === "NEWAZA") {
     if (cat.n === "MASTERS") {
