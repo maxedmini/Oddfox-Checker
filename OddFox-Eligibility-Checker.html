@@ -752,25 +752,28 @@
           <div style="margin-top: 4px;"><strong style="color: #1e293b;">Brown/Black only:</strong> U21+ keep Brown/Black only</div>
         </div>
       </div>
+    </div>
 
-      <!-- Advanced Merge Options -->
-      <div style="margin-top: 16px; padding: 10px 12px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
-        <label style="font-weight: 600; margin-bottom: 8px; display: block; color: #1e293b; font-size: 12px;">⚙️ Advanced Merge Options</label>
-
-        <div style="display: flex; flex-direction: column; gap: 6px;">
+    <!-- Advanced Merge Options -->
+    <div style="margin-top: 16px;">
+      <label style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #1e293b;">
+        ⚙️ Advanced Merge Options
+      </label>
+      <div style="padding: 12px; background: #f8fafc; border-radius: 6px; border: 2px solid #e2e8f0;">
+        <div style="display: flex; gap: 24px; flex-wrap: wrap;">
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="checkbox" id="allowGenderMergeU12" onchange="reanalyzeIfLoaded()" style="cursor: pointer; flex-shrink: 0;">
-            <span style="font-size: 12px; color: #334155; white-space: nowrap;">Allow male/female merges for U8-U12</span>
+            <input type="checkbox" id="allowGenderMergeU12" onchange="reanalyzeIfLoaded()" style="cursor: pointer; width: 16px; height: 16px;">
+            <span style="font-size: 13px; color: #1e293b; font-weight: 500;">Allow male/female merges for U8-U12</span>
           </label>
 
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="checkbox" id="useExactDOB" onchange="reanalyzeIfLoaded()" style="cursor: pointer; flex-shrink: 0;">
-            <span style="font-size: 12px; color: #334155; white-space: nowrap;">Use exact DOB matching (2-year span)</span>
+            <input type="checkbox" id="useExactDOB" onchange="reanalyzeIfLoaded()" style="cursor: pointer; width: 16px; height: 16px;">
+            <span style="font-size: 13px; color: #1e293b; font-weight: 500;">Use exact DOB matching (2-year span)</span>
           </label>
         </div>
 
-        <div id="advancedWarning" style="display: none; background: #fef3c7; border-left: 3px solid #f59e0b; padding: 6px 8px; margin-top: 8px; font-size: 11px; color: #92400e; border-radius: 4px;">
-          ⚠️ Advanced options may require regulatory approval
+        <div id="advancedWarning" style="display: none; background: #fef3c7; border-left: 3px solid #f59e0b; padding: 8px; margin-top: 10px; font-size: 11px; color: #92400e; border-radius: 4px; line-height: 1.4;">
+          ⚠️ <strong>Note:</strong> Advanced options may generate merges that require regulatory approval
         </div>
       </div>
     </div>
