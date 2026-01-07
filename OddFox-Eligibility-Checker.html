@@ -2699,80 +2699,71 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
 
   log('✅ Step 2 complete: Generated', Object.keys(recommendations).length, 'pairings between singles');
 
-  // Step 3: When minBracketSize3 is enabled, look for 2-athlete brackets that can move up to join singles
-  // IMPORTANT: This runs BEFORE singles move to multi-athlete brackets, so 2-athlete brackets
-  // get priority to move UP to join singles (creating 3-person brackets) rather than having
-  // singles move DOWN to join 2-athlete brackets
+  // Step 3: When minBracketSize3 is enabled, find 2-athlete brackets in LOWER weights that can move UP to join singles
+  // IMPORTANT: Iterate through singles and look DOWN for brackets below them (not up!)
+  // This ensures brackets move UP in weight to join singles, never down
   if (minBracketSize3) {
-    log('📊 Step 3: Finding 2-athlete brackets that can move up to create 3-person brackets...');
+    log('📊 Step 3: Finding 2-athlete brackets that can move up to join singles...');
 
-    // Find all 2-athlete categories
-    const twoAthleteCategories = Object.keys(categories).filter(cat => {
-      const athletes = categories[cat];
-      return athletes.length === 2 && !recommendations[cat]; // 2 athletes and no one is moving out yet
-    });
+    // Iterate through single-athlete categories
+    singleCategories.forEach(singleCat => {
+      if (used.has(singleCat)) return; // Already paired
+      if (targets.has(singleCat)) return; // Already receiving someone
 
-    log('  Found', twoAthleteCategories.length, '2-athlete brackets to consider');
+      const singleParsed = parseCategoryForSort(singleCat);
 
-    twoAthleteCategories.forEach(twoCat => {
-      const parsed = parseCategoryForSort(twoCat);
-      const athletes = categories[twoCat];
+      // Find all 2-athlete brackets in the SAME age/gender/discipline but LOWER weight
+      const potentialBrackets = Object.keys(categories).filter(cat => {
+        // Must have exactly 2 athletes
+        if (categories[cat].length !== 2) return false;
 
-      // Check if there's a single athlete in the next weight up (same age/gender/discipline)
-      // Athletes from the 2-athlete bracket will both move up
-      const result = findMergeOptions(athletes[0], currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
+        // Parse category to check if same discipline/age/gender
+        const catParsed = parseCategoryForSort(cat);
 
-      // Look for weight-up moves that target a single-athlete category
-      const viableTargets = result.merges.filter(merge => {
-        // Must be a weight move (same age category)
-        if (!merge.type || !merge.type.includes('Weight move-up')) return false;
+        // Must be same age and gender
+        if (catParsed.age !== singleParsed.age) return false;
+        if (catParsed.gender !== singleParsed.gender) return false;
+        if (catParsed.discipline !== singleParsed.discipline) return false;
 
-        // Target must be a single-athlete category
-        const targetCat = categories[merge.category];
-        if (!targetCat || targetCat.length !== 1) return false;
+        // Must be LOWER weight (so it can move UP to the single)
+        if (catParsed.weight >= singleParsed.weight) return false;
 
-        // Target single athlete must not already have a recommendation to move elsewhere
-        if (recommendations[merge.category]) return false;
+        // Bracket must not already have recommendations
+        if (recommendations[cat]) return false;
 
         return true;
       });
 
-      if (viableTargets.length > 0) {
-        // Pick the closest weight move-UP (must be higher weight)
-        // Filter to only include targets with higher weight than current
-        const upwardTargets = viableTargets.filter(merge => {
-          const targetWeight = parseCategoryForSort(merge.category).weight;
-          return targetWeight > parsed.weight;
+      if (potentialBrackets.length > 0) {
+        // Pick the closest bracket (highest weight below the single)
+        potentialBrackets.sort((a, b) => {
+          const weightA = parseCategoryForSort(a).weight;
+          const weightB = parseCategoryForSort(b).weight;
+          return weightB - weightA; // Descending order (closest to single's weight)
         });
 
-        if (upwardTargets.length === 0) {
-          log('  ⚠️  No upward weight targets available for', twoCat);
-          return; // Skip this 2-athlete bracket - can't move down
-        }
+        const bracketToMove = potentialBrackets[0];
+        const bracketAthletes = categories[bracketToMove];
 
-        upwardTargets.sort((a, b) => {
-          const weightA = parseCategoryForSort(a.category).weight;
-          const weightB = parseCategoryForSort(b.category).weight;
-          return (weightA - parsed.weight) - (weightB - parsed.weight); // Closest weight UP
-        });
+        log(`  ✓ Found: 2-athlete bracket ${bracketToMove} will move UP to join single at ${singleCat}`);
 
-        const bestTarget = upwardTargets[0];
-
-        log(`  ✓ Found opportunity: Move 2-athlete bracket ${twoCat} up to join single in ${bestTarget.category}`);
-
-        // Create recommendations for BOTH athletes in the 2-athlete bracket
-        athletes.forEach((athlete, idx) => {
-          recommendations[twoCat + `::pair${idx}`] = {
-            merge: bestTarget,
-            score: 120, // High score - this creates a 3-person bracket!
+        // Create recommendations for BOTH athletes in the bracket
+        bracketAthletes.forEach((athlete, idx) => {
+          recommendations[bracketToMove + `::pair${idx}`] = {
+            merge: {
+              category: singleCat,
+              type: 'Weight move-up',
+              athleteCount: 1
+            },
+            score: 120, // High priority
             reason: '2-athlete bracket moving up to create 3-person bracket',
             isPairMove: true,
-            pairCategory: twoCat
+            pairCategory: bracketToMove
           };
         });
 
-        // Mark the target as used
-        targets.add(bestTarget.category);
+        // Mark the single as a target (receiving the bracket)
+        targets.add(singleCat);
       }
     });
 
