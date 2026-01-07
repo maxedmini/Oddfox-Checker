@@ -2694,7 +2694,8 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
     // Mark both as used
     used.add(pairing.from);
     used.add(pairing.to);
-    targets.add(pairing.to);
+    // Mark target (someone is moving to this category)
+    targets.set(pairing.to, { type: 'single-pairing' });
   }
 
   log('✅ Step 2 complete: Generated', Object.keys(recommendations).length, 'pairings between singles');
