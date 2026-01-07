@@ -2842,14 +2842,25 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
       });
 
       if (viableTargets.length > 0) {
-        // Pick the closest weight move
-        viableTargets.sort((a, b) => {
-          const weightA = parseCategoryForSort(a.category).weight;
-          const weightB = parseCategoryForSort(b.category).weight;
-          return Math.abs(weightA - parsed.weight) - Math.abs(weightB - parsed.weight);
+        // Pick the closest weight move-UP (must be higher weight)
+        // Filter to only include targets with higher weight than current
+        const upwardTargets = viableTargets.filter(merge => {
+          const targetWeight = parseCategoryForSort(merge.category).weight;
+          return targetWeight > parsed.weight;
         });
 
-        const bestTarget = viableTargets[0];
+        if (upwardTargets.length === 0) {
+          log('  ⚠️  No upward weight targets available for', twoCat);
+          return; // Skip this 2-athlete bracket - can't move down
+        }
+
+        upwardTargets.sort((a, b) => {
+          const weightA = parseCategoryForSort(a.category).weight;
+          const weightB = parseCategoryForSort(b.category).weight;
+          return (weightA - parsed.weight) - (weightB - parsed.weight); // Closest weight UP
+        });
+
+        const bestTarget = upwardTargets[0];
 
         log(`  ✓ Found opportunity: Move 2-athlete bracket ${twoCat} up to join single in ${bestTarget.category}`);
 
