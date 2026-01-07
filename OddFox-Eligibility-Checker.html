@@ -740,19 +740,15 @@
       <!-- Options Section -->
       <div>
         <!-- Belt Handling -->
-        <div style="margin-bottom: 16px;">
+        <div style="margin-bottom: 12px;">
           <label for="beltHandling" style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #1e293b;">
             🥋 Belt Handling (Newaza/BJJ only)
           </label>
-          <select id="beltHandling" onchange="reanalyzeIfLoaded()" style="width: 100%; padding: 10px; font-size: 14px; background: #ffffff; color: #1e293b; border: 2px solid #cbd5e1; border-radius: 6px; cursor: pointer; font-weight: 500;">
-            <option value="keep">Keep all belt divisions</option>
-            <option value="remove-all">Remove all belts</option>
-            <option value="brown-black-only">Brown/Black only for U21+</option>
+          <select id="beltHandling" onchange="reanalyzeIfLoaded()" title="Choose how belt divisions are handled in results" style="width: 100%; padding: 10px; font-size: 14px; background: #ffffff; color: #1e293b; border: 2px solid #cbd5e1; border-radius: 6px; cursor: pointer; font-weight: 500;">
+            <option value="keep" title="Keep all belt divisions">Keep all belt divisions</option>
+            <option value="remove-all" title="Remove all belt divisions">Remove all belts</option>
+            <option value="brown-black-only" title="U21+ keep Brown/Black belts only">Brown/Black only for U21+</option>
           </select>
-          <div style="margin-top: 8px; padding: 8px; background: #f1f5f9; border-radius: 4px; font-size: 11px; color: #475569; line-height: 1.5;">
-            <div><strong style="color: #1e293b;">Remove all:</strong> No belt divisions</div>
-            <div style="margin-top: 4px;"><strong style="color: #1e293b;">Brown/Black only:</strong> U21+ keep Brown/Black only</div>
-          </div>
         </div>
 
         <!-- Advanced Merge Options -->
@@ -762,19 +758,19 @@
           </label>
           <div style="padding: 12px; background: #f8fafc; border-radius: 6px; border: 2px solid #e2e8f0;">
             <div style="display: flex; flex-direction: column; gap: 8px;">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Enable cross-gender merging for U8, U10, and U12 age categories only">
                 <input type="checkbox" id="allowGenderMergeU12" onchange="reanalyzeIfLoaded()" style="cursor: pointer; width: 16px; height: 16px;">
                 <span style="font-size: 13px; color: #1e293b; font-weight: 500;">Allow male/female merges for U8-U12</span>
               </label>
 
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Match athletes within 2 years based on exact date of birth, allowing matches across age categories">
                 <input type="checkbox" id="useExactDOB" onchange="reanalyzeIfLoaded()" style="cursor: pointer; width: 16px; height: 16px;">
                 <span style="font-size: 13px; color: #1e293b; font-weight: 500;">Use exact DOB matching (2-year span)</span>
               </label>
             </div>
 
             <div id="advancedWarning" style="display: none; background: #fef3c7; border-left: 3px solid #f59e0b; padding: 8px; margin-top: 10px; font-size: 11px; color: #92400e; border-radius: 4px; line-height: 1.4;">
-              ⚠️ <strong>Note:</strong> Advanced options may require regulatory approval
+              ⚠️ <strong>Note:</strong> Advanced options may generate merges that require regulatory approval
             </div>
           </div>
         </div>
