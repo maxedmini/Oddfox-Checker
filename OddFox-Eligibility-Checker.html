@@ -2598,11 +2598,14 @@ function changeSortOrder(sortType) {
 /** =========================
  *  SMART MERGE OPTIMIZER
  *  ========================= */
-function optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions = null, allowGenderMergeU12 = false, useExactDOB = false) {
+function optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions = null, allowGenderMergeU12 = false, useExactDOB = false, minBracketSize3 = false) {
   const categoryLabel = singleCategories.length === 1 && categories[singleCategories[0]].length === 2
     ? 'categories with < 3 athletes'
     : 'single-athlete categories';
   log('🧠 Smart Merge Optimizer: Starting optimization for', singleCategories.length, categoryLabel);
+  if (minBracketSize3) {
+    log('  ⚠️ Min bracket size 3 enabled - prioritizing 3+ person brackets');
+  }
 
   const recommendations = {}; // category -> { merge, score, reason }
   const used = new Set(); // Track which singles have been paired
@@ -2762,12 +2765,24 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
       }
 
       // Bonus for larger target brackets
-      if (merge.athleteCount >= 3) {
-        score += 10;
-        reason += ' • Into bracket with ' + merge.athleteCount + ' athletes';
-      } else if (merge.athleteCount === 2) {
-        score += 5;
-        reason += ' • Into bracket with 2 athletes';
+      if (minBracketSize3) {
+        // When min bracket size 3 is enabled, strongly prefer 3+ person brackets
+        if (merge.athleteCount >= 3) {
+          score += 50; // Large bonus for meeting minimum requirement
+          reason += ' • Creates 3+ bracket (' + merge.athleteCount + ' athletes)';
+        } else if (merge.athleteCount === 2) {
+          score += 5; // Small bonus - only use if no 3+ options available
+          reason += ' • Creates 2-person bracket (fallback)';
+        }
+      } else {
+        // Standard scoring when min bracket size 3 is not enabled
+        if (merge.athleteCount >= 3) {
+          score += 10;
+          reason += ' • Into bracket with ' + merge.athleteCount + ' athletes';
+        } else if (merge.athleteCount === 2) {
+          score += 5;
+          reason += ' • Into bracket with 2 athletes';
+        }
       }
 
       return { ...merge, score, reason };
@@ -3116,7 +3131,7 @@ function analyzeCSV() {
       let recommendationTargets = new Set(); // Track categories that are targets of recommendations
       let secondMatches = [];
 
-      const optimizerResult = optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
+      const optimizerResult = optimizeMerges(singleCategories, categories, currentYear, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB, minBracketSize3);
       recommendations = optimizerResult.recommendations;
       recommendationTargets = optimizerResult.targets;
       log('🎯 Smart Recommendations:', Object.keys(recommendations).length, 'recommendations generated');
