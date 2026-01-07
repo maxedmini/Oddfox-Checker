@@ -2765,14 +2765,17 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
       }
 
       // Bonus for larger target brackets
+      // Calculate resulting bracket size after merge (current athletes + 1 merging athlete)
+      const resultingSize = (merge.athleteCount || 0) + 1;
+
       if (minBracketSize3) {
-        // When min bracket size 3 is enabled, strongly prefer 3+ person brackets
-        if (merge.athleteCount >= 3) {
+        // When min bracket size 3 is enabled, strongly prefer merges that create 3+ person brackets
+        if (resultingSize >= 3) {
           score += 50; // Large bonus for meeting minimum requirement
-          reason += ' • Creates 3+ bracket (' + merge.athleteCount + ' athletes)';
-        } else if (merge.athleteCount === 2) {
+          reason += ' • Creates ' + resultingSize + '-person bracket (meets minimum)';
+        } else {
           score += 5; // Small bonus - only use if no 3+ options available
-          reason += ' • Creates 2-person bracket (fallback)';
+          reason += ' • Creates ' + resultingSize + '-person bracket (fallback)';
         }
       } else {
         // Standard scoring when min bracket size 3 is not enabled
