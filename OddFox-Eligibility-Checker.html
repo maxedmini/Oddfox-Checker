@@ -3288,7 +3288,8 @@ function analyzeCSV() {
             athlete,
             merges: result.merges,
             recommendation,
-            requiresConfirmation: requiresConfirmation // Flag for displaying warning
+            requiresConfirmation: requiresConfirmation, // Flag for displaying warning
+            isIncomingTarget: isRecommendationTarget || hasIncomingMerge // Flag if receiving athletes from below
           });
         } else if (isRecommendationTarget || hasIncomingMerge) {
           // This athlete has no outgoing merge options, but someone could move TO them
@@ -4841,10 +4842,17 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
     itemHtml += '  </div>';
 
     // Check if this is an incoming target (someone is moving TO this athlete)
-    if (item.isIncomingTarget) {
+    if (item.isIncomingTarget && item.merges.length === 0) {
+      // No outgoing merges, only incoming
       itemHtml += '  <div style="margin-top: 8px; padding: 12px; background: #1e293b; border-left: 3px solid #10b981; border-radius: 4px;">';
-      itemHtml += '    <div style="font-size: 12px; color: #10b981; font-weight: 600; margin-bottom: 4px;">📥 INCOMING ATHLETE:</div>';
-      itemHtml += '    <div style="font-size: 11px; color: #cbd5e1;">Another athlete is recommended to move into this category to create a valid bracket.</div>';
+      itemHtml += '    <div style="font-size: 12px; color: #10b981; font-weight: 600; margin-bottom: 4px;">📥 INCOMING ATHLETES:</div>';
+      itemHtml += '    <div style="font-size: 11px; color: #cbd5e1;">Athletes from a 2-person bracket are recommended to move up to join you, creating a 3-person bracket.</div>';
+      itemHtml += '  </div>';
+    } else if (item.isIncomingTarget && item.merges.length > 0) {
+      // Has both incoming and outgoing merges - prioritize incoming (don't show outgoing merges)
+      itemHtml += '  <div style="margin-top: 8px; padding: 12px; background: #1e293b; border-left: 3px solid #10b981; border-radius: 4px;">';
+      itemHtml += '    <div style="font-size: 12px; color: #10b981; font-weight: 600; margin-bottom: 4px;">📥 INCOMING ATHLETES:</div>';
+      itemHtml += '    <div style="font-size: 11px; color: #cbd5e1;">Athletes from a 2-person bracket in a lower weight are recommended to move up to join you, creating a 3-person bracket at your weight.</div>';
       itemHtml += '  </div>';
     } else if (item.hasSecondMatchHelp) {
       itemHtml += '  <div style="margin-top: 8px; padding: 12px; background: #1e293b; border-left: 3px solid #a855f7; border-radius: 4px;">';
