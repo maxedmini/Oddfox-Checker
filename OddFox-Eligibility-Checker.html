@@ -4661,7 +4661,7 @@ function exportBracketsCSV() {
   Object.keys(csvAllCategories).forEach(categoryName => {
     const athletes = csvAllCategories[categoryName];
 
-    athletes.forEach(athlete => {
+    athletes.forEach((athlete, athleteIndex) => {
       const athleteName = athlete.name;
       let finalBracket = categoryName;
       let originalBracket = athlete.originalGroup || categoryName; // Use pre-belt-handling name
@@ -4669,7 +4669,13 @@ function exportBracketsCSV() {
       let extraMatch = 'No';
 
       // Check if this athlete has a smart recommendation to move
-      if (csvRecommendations[categoryName]) {
+      // First check for pair recommendations (from Step 3: 2-athlete brackets moving up)
+      const pairKey = categoryName + '::pair' + athleteIndex;
+      if (csvRecommendations[pairKey]) {
+        finalBracket = csvRecommendations[pairKey].merge.category;
+        movedFrom = categoryName;
+      } else if (csvRecommendations[categoryName]) {
+        // Regular recommendation (from Step 2: singles pairing)
         finalBracket = csvRecommendations[categoryName].merge.category;
         movedFrom = categoryName;
       }
