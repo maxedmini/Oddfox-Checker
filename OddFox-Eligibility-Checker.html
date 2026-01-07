@@ -4814,6 +4814,15 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       html += '  <div class="csv-tab-count">' + mixedMerges.length + '</div>';
       html += '</div>';
     }
+
+    // DOB-Matched tab (shown when DOB matching is enabled and available)
+    const dobMerges = withMerges.filter(m => m.merges && m.merges.some(merge => merge.isDOBBased));
+    if (dobMerges.length > 0) {
+      html += '<div class="csv-tab" data-tab="tab-dob" onclick="switchCSVTab(\'tab-dob\')">';
+      html += '  <div class="csv-tab-title">📅 DOB-Matched</div>';
+      html += '  <div class="csv-tab-count">' + dobMerges.length + '</div>';
+      html += '</div>';
+    }
   } else {
     if (withMerges.length > 0) {
       html += '<div class="csv-tab active" data-tab="tab-allmerges" onclick="switchCSVTab(\'tab-allmerges\')">';
@@ -4994,6 +5003,22 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       html += '</div>';
 
       mixedMerges.forEach(item => {
+        html += renderCategoryItem(item, false);
+      });
+
+      html += '</div>';
+    }
+
+    // Tab content: DOB-Matched Merges
+    const dobMerges = withMerges.filter(m => m.merges && m.merges.some(merge => merge.isDOBBased));
+    if (dobMerges.length > 0) {
+      html += '<div id="tab-dob" class="csv-tab-content">';
+      html += '<div style="padding: 12px; background: #1e293b; border-left: 3px solid #3b82f6; border-radius: 4px; margin-bottom: 16px;">';
+      html += '  <div style="font-size: 12px; color: #60a5fa; font-weight: 600;">📅 DOB-Matched Merges (2-Year Age Span)</div>';
+      html += '  <div style="font-size: 11px; color: #dbeafe; margin-top: 4px;">Athletes matched based on exact date of birth within 2-year age difference, allowing cross-age-category merges.</div>';
+      html += '</div>';
+
+      dobMerges.forEach(item => {
         html += renderCategoryItem(item, false);
       });
 
