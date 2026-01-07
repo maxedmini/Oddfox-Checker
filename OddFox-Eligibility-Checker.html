@@ -804,7 +804,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.5.0"; // Feature: Global merge optimization (evaluates scenarios to minimize singles)
+const APP_VERSION = "3.5.1"; // Fix: Extract gender from Entry field when Gender column is empty
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -3375,12 +3375,21 @@ function analyzeCSV() {
           categories[normalizedGroup] = [];
         }
 
+        // Extract gender from Entry field if Gender column is empty
+        let gender = (row['Gender '] || row['Gender'] || '').trim();
+        if (!gender && row['Entry']) {
+          // Extract MALE/FEMALE from Entry field (e.g., "Youth Ju-Jitsu Fighting MALE")
+          if (row['Entry'].includes('MALE')) {
+            gender = row['Entry'].includes('FEMALE') ? 'FEMALE' : 'MALE';
+          }
+        }
+
         categories[normalizedGroup].push({
           name: `${row['Firstname'] || ''} ${row['Lastname'] || ''}`.trim(),
           birthDate: row['Birth'] || '',
           birthYear: row['Birth'] ? row['Birth'].split('-')[0] : '',
           weight: row['Weighin weight'] || '',
-          gender: (row['Gender '] || row['Gender'] || '').trim(),
+          gender: gender,
           ageCategory: row['AGE'] || '',
           weightClass: row['WEIGHT'] || '',
           group: normalizedGroup,
