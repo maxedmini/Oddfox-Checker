@@ -3092,7 +3092,7 @@ function analyzeCSV() {
       }
 
       // Find categories that need merging based on minimum bracket size
-      const minSize = minBracketSize3 ? 3 : 1;
+      const minSize = minBracketSize3 ? 3 : 2;
       const singleCategories = Object.keys(categories).filter(cat => categories[cat].length < minSize);
 
       if (singleCategories.length === 0) {
