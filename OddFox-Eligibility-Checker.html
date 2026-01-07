@@ -804,7 +804,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "3.4.1"; // Fix: dropdown event handling and accordion behavior
+const APP_VERSION = "3.4.2"; // Fix: prevent suggesting moves to brackets that will be emptied
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2815,15 +2815,36 @@ function optimizeMerges(singleCategories, categories, currentYear, beltHandlingM
         return false;
       }
 
+      const targetAthletes = categories[merge.category];
+
       // Check if target category has a single athlete who is also moving out
       // If the target is a single-athlete category AND has a recommendation, it will be empty
-      const targetAthletes = categories[merge.category];
       if (targetAthletes.length === 1 && recommendations[merge.category]) {
         log('    ❌ Excluding', merge.category, '- single athlete will move out, would leave this athlete alone');
         return false;
       }
 
-      // Target category is valid (either has multiple athletes, or single athlete staying)
+      // CRITICAL: Check if ALL athletes in a 2+ athlete bracket are being recommended to move out
+      // This prevents suggesting moves to brackets that will be completely emptied
+      if (targetAthletes.length >= 2) {
+        // Count how many athletes in this category have recommendations to move elsewhere
+        let athletesMovingOut = 0;
+        targetAthletes.forEach(targetAthlete => {
+          // Check if this specific athlete has a recommendation
+          const athleteCategory = targetAthlete.group;
+          if (recommendations[athleteCategory]) {
+            athletesMovingOut++;
+          }
+        });
+
+        // If ALL athletes are moving out, this bracket will be empty
+        if (athletesMovingOut === targetAthletes.length) {
+          log('    ❌ Excluding', merge.category, '- all', targetAthletes.length, 'athletes will move out, would leave this athlete alone');
+          return false;
+        }
+      }
+
+      // Target category is valid (has athletes who will stay)
       return true;
     });
 
