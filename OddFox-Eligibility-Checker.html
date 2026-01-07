@@ -666,7 +666,7 @@
   <div class="form-row" style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
     <div style="flex:1;min-width:100px;">
       <label for="eventYear">Event year</label>
-      <input type="number" id="eventYear" aria-label="Event year" value="2025" min="2000" max="2100" required style="margin-bottom:0;width:100%;" />
+      <input type="number" id="eventYear" aria-label="Event year" min="2000" max="2100" required style="margin-bottom:0;width:100%;" />
     </div>
     <div style="flex:1;min-width:100px;">
       <label for="birthYear">Birth year</label>
@@ -5010,6 +5010,12 @@ document.addEventListener('DOMContentLoaded', function() {
   const versionDisplay = document.getElementById('versionDisplay');
   if (versionDisplay) {
     versionDisplay.textContent = APP_VERSION;
+  }
+
+  // Set event year to current year
+  const eventYearInput = document.getElementById('eventYear');
+  if (eventYearInput) {
+    eventYearInput.value = new Date().getFullYear();
   }
 
   // Restore previous CSV analysis results if available
