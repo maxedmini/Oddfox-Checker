@@ -1,0 +1,8 @@
+# Log files
+log.log
+
+# macOS files
+.DS_Store
+
+# Claude Code
+.claude/
