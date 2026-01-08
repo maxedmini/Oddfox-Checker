@@ -792,6 +792,7 @@
         <input type="file" id="csvFile" accept=".csv" style="margin-bottom: 12px; width: 100%;" />
         <div style="display: flex; gap: 8px;">
           <button id="analyzeCsvBtn" style="flex: 1; padding: 14px 32px; font-weight: 600; margin: 0;">Analyze CSV</button>
+          <button onclick="formatOriginalCSV()" style="width: auto; padding: 14px 24px; margin: 0; background: #3b82f6; color: white; font-weight: 600; border-radius: 6px;">Format Original</button>
           <button onclick="clearCSVResults()" style="width: auto; padding: 14px 24px; margin: 0; background: #ef4444; color: white; font-weight: 600; border-radius: 6px;">Clear</button>
         </div>
       </div>
@@ -3528,9 +3529,25 @@ function findSecondMatches(singleCategories, categories, currentYear, beltHandli
       return false;
     }
 
+    // Check if ANY other single athlete could merge INTO this category
+    let hasIncomingMerge = false;
+    for (const otherCat of singleCategories) {
+      if (otherCat === cat) continue; // Skip self
+      const otherAthlete = categories[otherCat][0];
+      const otherMergeOptions = findMergeOptions(otherAthlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
+
+      if (otherMergeOptions.merges.some(m => m.category === cat)) {
+        hasIncomingMerge = true;
+        console.log('  ⏭️  Excluding', cat, '- has incoming merge option from', otherCat);
+        break;
+      }
+    }
+
+    if (hasIncomingMerge) return false;
+
     return true; // No recommendations and no merge options = truly lonely
   });
-  console.log('  Found', unpaired.length, 'truly unpaired athletes remaining (no recommendations, no merge options)');
+  console.log('  Found', unpaired.length, 'truly unpaired athletes remaining (no recommendations, no merge options, no incoming merges)');
 
   if (unpaired.length === 0) {
     return secondMatches; // No one left to help
@@ -3781,6 +3798,9 @@ function analyzeCSV() {
           athlete.originalGroup = athlete.group;
         });
       });
+
+      // Store original CSV data for formatted export
+      originalCSVData = JSON.parse(JSON.stringify(categories));
 
       // Apply belt handling before analyzing
       const beltHandling = document.getElementById('beltHandling');
@@ -5280,6 +5300,7 @@ let csvRecommendations = {}; // Store smart recommendations
 let csvRecommendationTargets = new Set(); // Store recommendation targets
 let csvMultiDisciplineMap = new Map(); // Track athletes in multiple disciplines
 let csvDuplicateMap = new Map(); // Track actual duplicate registrations
+let originalCSVData = null; // Store original CSV data for formatted export
 
 function exportBracketsCSV() {
   console.log('📥 Exporting brackets CSV...');
@@ -5419,6 +5440,146 @@ function escapeCsvValue(value) {
     return '"' + stringValue.replace(/"/g, '""') + '"';
   }
   return stringValue;
+}
+
+function formatOriginalCSV() {
+  console.log('📥 Formatting original CSV...');
+
+  const fileInput = document.getElementById('csvFile');
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    alert('Please select a CSV file first.');
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      const csvText = e.target.result;
+      const data = parseCSV(csvText);
+
+      if (data.length === 0) {
+        alert('No data found in CSV file.');
+        return;
+      }
+
+      // Group entries by category
+      const categories = {};
+
+      data.forEach(row => {
+        const group = row['Group'] || '';
+        if (!group || group === 'COACH PASS') return;
+
+        // Normalize the group key for consistent matching across browsers
+        const normalizedGroup = normalizeCategoryKey(group);
+
+        if (!categories[normalizedGroup]) {
+          categories[normalizedGroup] = [];
+        }
+
+        // Extract gender from Entry field if Gender column is empty
+        let gender = (row['Gender '] || row['Gender'] || '').trim();
+        if (!gender && row['Entry']) {
+          // Extract MALE/FEMALE from Entry field (e.g., "Youth Ju-Jitsu Fighting MALE")
+          if (row['Entry'].includes('MALE')) {
+            gender = row['Entry'].includes('FEMALE') ? 'FEMALE' : 'MALE';
+          }
+        }
+
+        categories[normalizedGroup].push({
+          name: `${row['Firstname'] || ''} ${row['Lastname'] || ''}`.trim(),
+          birthDate: row['Birth'] || '',
+          weight: row['Weighin weight'] || '',
+          gender: gender,
+          ageCategory: row['AGE'] || '',
+          weightClass: row['WEIGHT'] || '',
+          group: normalizedGroup,
+          registeredCategory: group
+        });
+      });
+
+      // Create CSV header
+      let csv = 'Full Name,Category,Age Bracket,Weight Bracket,Gender,Birth Date,Weight\n';
+
+      // Collect all athletes from all categories
+      const allAthletes = [];
+      Object.keys(categories).forEach(categoryKey => {
+        categories[categoryKey].forEach(athlete => {
+          allAthletes.push({
+            name: athlete.name,
+            category: athlete.registeredCategory || athlete.group,
+            ageBracket: athlete.ageCategory,
+            weightBracket: athlete.weightClass,
+            gender: athlete.gender,
+            birthDate: athlete.birthDate,
+            weight: athlete.weight
+          });
+        });
+      });
+
+      // Sort athletes using the same sorting logic as exportBracketsCSV
+      allAthletes.sort((a, b) => {
+        const parseA = parseCategoryForSort(a.category);
+        const parseB = parseCategoryForSort(b.category);
+
+        // 1. Sort by discipline/gender group (MALE before FEMALE)
+        const disciplineCompare = getDisciplineOrder(parseA) - getDisciplineOrder(parseB);
+        if (disciplineCompare !== 0) return disciplineCompare;
+
+        // 2. Sort by age category
+        const ageCompare = getAgeOrder(parseA.age) - getAgeOrder(parseB.age);
+        if (ageCompare !== 0) return ageCompare;
+
+        // 3. Sort by weight (minus first, then by value, then plus)
+        if (parseA.isPlus !== parseB.isPlus) {
+          return parseA.isPlus ? 1 : -1; // Minus weights before plus
+        }
+        return parseA.weight - parseB.weight;
+      });
+
+      // Build CSV rows with dividers between brackets (same as exportBracketsCSV)
+      let lastCategory = null;
+      allAthletes.forEach((athlete, index) => {
+        // Add divider row when category changes (except before first entry)
+        if (lastCategory !== null && athlete.category !== lastCategory) {
+          csv += '\n'; // Empty row as divider
+        }
+
+        const row = [
+          escapeCsvValue(athlete.name),
+          escapeCsvValue(athlete.category),
+          escapeCsvValue(athlete.ageBracket),
+          escapeCsvValue(athlete.weightBracket),
+          escapeCsvValue(athlete.gender),
+          escapeCsvValue(athlete.birthDate),
+          escapeCsvValue(athlete.weight)
+        ].join(',');
+        csv += row + '\n';
+
+        lastCategory = athlete.category;
+      });
+
+      // Trigger download
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'original_formatted.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      console.log('✅ Original CSV formatted and exported:', allAthletes.length, 'athletes');
+    } catch (error) {
+      console.error('Error formatting CSV:', error);
+      alert('Error formatting CSV file. Please check the file format.');
+    }
+  };
+
+  reader.readAsText(file);
 }
 
 function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, useSmartRecommendations, secondMatches = [], duplicateRestrictions = null, allCategories = {}, allowGenderMergeU12 = false, useExactDOB = false) {
