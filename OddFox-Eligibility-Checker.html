@@ -644,10 +644,22 @@
       flex: 1;
       min-width: 0;
       overflow: hidden;
+    }
+    .merge-category-content.clickable {
       cursor: pointer;
     }
-    .merge-category-content:hover {
+    .merge-category-content.clickable:hover {
       opacity: 0.8;
+    }
+    .hoverable-content {
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .hoverable-content:hover {
+      opacity: 0.8;
+    }
+    .no-hover-effect {
+      opacity: 1 !important;
     }
     .merge-text {
       font-size: 14px;
@@ -824,7 +836,7 @@
 
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Match athletes within 2 years based on exact date of birth, allowing matches across age categories">
             <input type="checkbox" id="useExactDOB" onchange="reanalyzeIfLoaded()" style="cursor: pointer; width: 16px; height: 16px;">
-            <span style="font-size: 13px; color: #1e293b; font-weight: 500;">📅 Use exact DOB matching (2-year span)</span>
+            <span style="font-size: 13px; color: #1e293b; font-weight: 500;">📅 Smart matching by age + weight proximity</span>
           </label>
 
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;" title="Prefer 3-person brackets by suggesting 2-athlete brackets move up to join singles">
@@ -862,7 +874,7 @@
 /** =========================
  *  VERSION & CACHE BUSTER
  *  ========================= */
-const APP_VERSION = "5.0.0"; // Fix: Global optimizer now includes single-to-single pairing (restores original behavior)
+const APP_VERSION = "6.0.0"; // No Merge / Show Match Options
 
 // Version check - force reload if old cached code detected
 (function() {
@@ -2641,10 +2653,12 @@ function changeSortOrder(sortType) {
   sortCSVResults(csvAgeAndWeightOnly, sortType);
   sortCSVResults(csvWithoutMerges, sortType);
 
-  // Smart recommendations always enabled
+  // Smart recommendations always enabled for display
   const useSmartRecommendations = true;
+  // Check if checkbox is enabled for tab title
+  const smartMatchingEnabled = document.getElementById('useExactDOB').checked;
 
-  renderCSVResults(csvWithMerges, csvAgeAndWeightOnly, csvWithoutMerges, csvTotal, useSmartRecommendations, csvSecondMatches, csvDuplicateMap, csvAllCategories);
+  renderCSVResults(csvWithMerges, csvAgeAndWeightOnly, csvWithoutMerges, csvTotal, useSmartRecommendations, csvSecondMatches, csvDuplicateMap, csvAllCategories, smartMatchingEnabled);
 
   // Restore the selected sort option
   const dropdown = document.getElementById('csvSortOrder');
@@ -3757,6 +3771,7 @@ function analyzeCSV() {
       // Group entries by category
       const categories = {};
       const currentYear = new Date().getFullYear();
+      csvEventYear = currentYear; // Store globally for weight updates
 
       data.forEach(row => {
         const group = row['Group'] || '';
@@ -3777,14 +3792,72 @@ function analyzeCSV() {
             gender = row['Entry'].includes('FEMALE') ? 'FEMALE' : 'MALE';
           }
         }
+        // Also try to extract from Group field
+        if (!gender && group) {
+          if (group.includes('MALE')) {
+            gender = group.includes('FEMALE') ? 'FEMALE' : 'MALE';
+          } else if (group.includes('Boys')) {
+            gender = 'MALE';
+          } else if (group.includes('Girls')) {
+            gender = 'FEMALE';
+          }
+        }
+
+        // Extract weight from Group field if missing (e.g., "Groundfight MALE / U12 / -44 kg")
+        let weight = row['Weighin weight'] || '';
+        if (!weight && group) {
+          const weightMatch = group.match(/[/-]\s*(\d+)\s*kg/);
+          if (weightMatch) {
+            weight = weightMatch[1];
+          } else {
+            const plusWeightMatch = group.match(/\(\+\)\s*(\d+)\s*kg/);
+            if (plusWeightMatch) {
+              weight = plusWeightMatch[1];
+            }
+          }
+        }
+
+        // Extract age category from Group field if missing (e.g., "U12", "U14", "MASTERS")
+        let ageCategory = row['AGE'] || '';
+        let birthYear = row['Birth'] ? row['Birth'].split('-')[0] : '';
+        if (!ageCategory && group) {
+          const ageCategoryMatch = group.match(/\b(U\d+|MASTERS)\b/);
+          if (ageCategoryMatch) {
+            ageCategory = ageCategoryMatch[1];
+          }
+        }
+
+        // Calculate birth year from age category if missing
+        if (!birthYear && ageCategory && ageCategory.startsWith('U')) {
+          const maxAge = parseInt(ageCategory.substring(1));
+          if (!isNaN(maxAge)) {
+            // Calculate birth year based on current year and age category
+            // For U12 in 2026, athlete can be born in 2014 or 2015 (turns 12 in 2026)
+            birthYear = (currentYear - maxAge + 1).toString();
+          }
+        } else if (!birthYear && ageCategory === 'MASTERS') {
+          // For MASTERS, use a typical age (e.g., 30)
+          birthYear = (currentYear - 30).toString();
+        }
+
+        const athleteName = `${row['Firstname'] || ''} ${row['Lastname'] || ''}`.trim();
+
+        // Log when data is extracted from Group field
+        const extractedData = [];
+        if (!row['Gender '] && !row['Gender'] && gender) extractedData.push('gender');
+        if (!row['Weighin weight'] && weight) extractedData.push('weight');
+        if (!row['Birth'] && birthYear) extractedData.push('birth year');
+        if (extractedData.length > 0) {
+          console.log(`📝 Extracted ${extractedData.join(', ')} from Group field for ${athleteName}`);
+        }
 
         categories[normalizedGroup].push({
-          name: `${row['Firstname'] || ''} ${row['Lastname'] || ''}`.trim(),
+          name: athleteName,
           birthDate: row['Birth'] || '',
-          birthYear: row['Birth'] ? row['Birth'].split('-')[0] : '',
-          weight: row['Weighin weight'] || '',
+          birthYear: birthYear,
+          weight: weight,
           gender: gender,
-          ageCategory: row['AGE'] || '',
+          ageCategory: ageCategory,
           weightClass: row['WEIGHT'] || '',
           group: normalizedGroup,
           registeredCategory: group,
@@ -3815,8 +3888,11 @@ function analyzeCSV() {
       const useExactDOB = document.getElementById('useExactDOB')?.checked || false;
       const minBracketSize3 = document.getElementById('minBracketSize3')?.checked || false;
 
+      console.log('📋 Checkbox states:', { allowGenderMergeU12, useExactDOB, minBracketSize3 });
+
       // Validate DOB availability when option is enabled
       if (useExactDOB) {
+        console.log('✅ Smart matching checkbox is ENABLED');
         let invalidDOBCount = 0;
         Object.values(categories).flat().forEach(athlete => {
           const parsed = parseBirthDate(athlete.birthDate);
@@ -3880,6 +3956,15 @@ function analyzeCSV() {
       const allMergeResults = new Map();
       singleCategories.forEach(catName => {
         const athlete = categories[catName][0]; // Single-athlete categories only have one athlete
+
+        // Calculate exact age for smart matching display
+        let exactAge = null;
+        if (athlete.birthDate) {
+          const birthDate = parseBirthDate(athlete.birthDate);
+          exactAge = calculateExactAge(birthDate, currentYear);
+        }
+        athlete.exactAge = exactAge; // Store for display
+
         const result = findMergeOptions(athlete, currentYear, categories, beltHandlingMode, duplicateRestrictions, allowGenderMergeU12, useExactDOB);
         allMergeResults.set(catName, { athlete, result });
       });
@@ -3998,16 +4083,25 @@ function analyzeCSV() {
               hasSecondMatchHelp: true // Flag to indicate has second match helper
             });
           } else {
+            // Check if there are smart matches (should ONLY appear in "No Merge" tab)
+            const hasSmartMatches = result.smartMatches && result.smartMatches.length > 0;
+
             // Check if there are blocked suggestions due to duplicate rule
             if (result.blockedByDuplicate && result.blockedByDuplicate.length > 0) {
               withoutMerges.push({
                 category: catName,
                 athlete,
                 reasons: result.reasons,
-                blockedSuggestions: result.blockedByDuplicate
+                blockedSuggestions: result.blockedByDuplicate,
+                smartMatches: hasSmartMatches ? result.smartMatches : undefined // Include smart matches in "No Merge" tab
               });
             } else {
-              withoutMerges.push({ category: catName, athlete, reasons: result.reasons });
+              withoutMerges.push({
+                category: catName,
+                athlete,
+                reasons: result.reasons,
+                smartMatches: hasSmartMatches ? result.smartMatches : undefined // Include smart matches in "No Merge" tab
+              });
             }
           }
         }
@@ -4026,7 +4120,7 @@ function analyzeCSV() {
       csvDuplicateMap = duplicateRestrictions;
 
       // Render results
-      renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, singleCategories.length, useSmartRecommendations, secondMatches, duplicateRestrictions, categories, allowGenderMergeU12, useExactDOB);
+      renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, singleCategories.length, useSmartRecommendations, secondMatches, duplicateRestrictions, categories, useExactDOB, allowGenderMergeU12, useExactDOB);
 
     } catch (error) {
       resultsDiv.innerHTML = '<div class="blocked">Error parsing CSV: ' + error.message + '</div>';
@@ -4095,6 +4189,36 @@ function getCategoryCount(categoryName, allCategories, excludeAthlete) {
  * @returns {Array} List of athletes in the category
  */
 function getCategoryAthletes(categoryName, allCategories, excludeAthlete) {
+  // Check if this is a MIXED category
+  if (categoryName.includes(' MIXED /')) {
+    // For MIXED categories, we need to look up both MALE and FEMALE versions
+    const maleCategory = categoryName.replace(' MIXED /', ' MALE /');
+    const femaleCategory = categoryName.replace(' MIXED /', ' FEMALE /');
+
+    const maleKey = normalizeCategoryKey(maleCategory);
+    const femaleKey = normalizeCategoryKey(femaleCategory);
+
+    let athletes = [];
+
+    // Get male athletes
+    if (allCategories[maleKey]) {
+      athletes = athletes.concat(allCategories[maleKey]);
+    }
+
+    // Get female athletes
+    if (allCategories[femaleKey]) {
+      athletes = athletes.concat(allCategories[femaleKey]);
+    }
+
+    // Exclude the specified athlete if provided
+    if (excludeAthlete) {
+      athletes = athletes.filter(a => a.name !== excludeAthlete.name);
+    }
+
+    return athletes;
+  }
+
+  // Regular category lookup
   const normalizedKey = normalizeCategoryKey(categoryName);
 
   if (allCategories[normalizedKey]) {
@@ -4130,12 +4254,12 @@ function generateAthleteListDropdown(mergeCategory, currentAthlete, dropdownId) 
   html += '  <button onclick="toggleAthleteList(\'' + dropdownId + '\', event)" class="athlete-dropdown-btn" style="background: transparent; color: #94a3b8; border: 1px solid #475569; padding: 4px 12px; font-size: 11px; cursor: pointer; border-radius: 4px; transition: all 0.2s;">';
   html += '    <span id="' + dropdownId + '-icon">▶</span> Show athletes in this category (' + athletes.length + ')';
   html += '  </button>';
-  html += '  <div id="' + dropdownId + '" style="display: none; margin-top: 8px; padding: 8px; background: #0f172a; border-radius: 4px; border: 1px solid #334155;">';
+  html += '  <div id="' + dropdownId + '" onclick="event.stopPropagation();" style="display: none; margin-top: 8px; padding: 8px; background: #0f172a; border-radius: 4px; border: 1px solid #334155;">';
 
   athletes.forEach((athlete, idx) => {
     html += '    <div style="padding: 6px; border-bottom: ' + (idx < athletes.length - 1 ? '1px solid #1e293b' : 'none') + ';">';
     html += '      <div style="font-size: 11px; color: #e2e8f0; font-weight: 500;">' + athlete.name + '</div>';
-    html += '      <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">Currently in: ' + athlete.registeredCategory + '</div>';
+    html += '      <div style="font-size: 10px; color: #cbd5e1; margin-top: 2px;">Currently in: ' + athlete.registeredCategory + '</div>';
     html += '    </div>';
   });
 
@@ -4379,12 +4503,20 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
   const reasons = []; // Track why no merges are available
   const blockedByDuplicate = []; // Track suggestions blocked by duplicate entry rule
 
+  // DEBUG: Log when smart matching is enabled
+  if (useExactDOB) {
+    console.log('🔧 Smart matching ENABLED for', athlete.name);
+  }
+
   // Parse birth date for exact DOB matching if enabled
   let athleteBirthDate = null;
   let exactAge = null;
   if (useExactDOB && athlete.birthDate) {
     athleteBirthDate = parseBirthDate(athlete.birthDate);
     exactAge = calculateExactAge(athleteBirthDate, eventYear);
+    console.log('  Parsed birth date for', athlete.name, '- Age:', exactAge?.years.toFixed(2), 'years');
+  } else if (useExactDOB && !athlete.birthDate) {
+    console.log('  ⚠️ Smart matching enabled but', athlete.name, 'has no birth date');
   }
 
   // Parse weight from either Weighin weight or WEIGHT column
@@ -5029,112 +5161,140 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
     }
   }
 
-  // DOB-based matching logic for 2-year age span when enabled
-  if (useExactDOB && athleteBirthDate && exactAge) {
-    console.log('Checking DOB-based matches for', athlete.name, '(useExactDOB enabled)');
-    console.log('  Athlete exact age:', exactAge.years.toFixed(2), 'years');
+  // Smart matching logic - find fairest INDIVIDUAL OPPONENTS across ALL categories when enabled
+  // ONLY runs for athletes with no regular merges
+  if (useExactDOB && merges.length === 0) {
+    if (!athleteBirthDate || !exactAge) {
+      console.log('⚠️ Cannot find fairest opponent for', athlete.name, '- missing birth date');
+      reasons.push('Smart matching requires valid birth date');
+    } else if (weight <= 0) {
+      console.log('⚠️ Cannot find fairest opponent for', athlete.name, '- missing weight');
+      reasons.push('Smart matching requires valid weight');
+    } else {
+      console.log('🔍 Finding fairest INDIVIDUAL opponents for', athlete.name, '(no regular merges)');
+      console.log('  Athlete exact age:', exactAge.years.toFixed(2), 'years');
+      console.log('  Athlete weight:', weight, 'kg');
 
-    // Find all age categories within 2-year span
-    const ageCatsWithinSpan = cats.filter((cat, idx) => {
-      const catAgeRange = AGE_CATS.find(c => c.n === cat.n);
-      if (!catAgeRange) return false;
+    // Search ALL age categories (not just athlete's category or 2-year span)
+    const ageCatsToSearch = AGE_CATS;
+    console.log('  Will search', ageCatsToSearch.length, 'age categories');
 
-      const minAge = catAgeRange.min;
-      const maxAge = catAgeRange.max;
-
-      // Check if athlete could compete with someone in this category who is within 2 years
-      // Example: 10.36 year old in U12 (11-12) should match U10 (9-10) because 10.36 - 9 = 1.36 years
-      // Strategy: Check if athlete's age is within 2 years of ANY age in the category range
-      const athleteAge = exactAge.years;
-
-      // Athlete could compete with youngest in category (minAge)
-      const diffToMin = Math.abs(athleteAge - minAge);
-      // Athlete could compete with oldest in category (maxAge + 0.99)
-      const diffToMax = Math.abs(athleteAge - (maxAge + 0.99));
-
-      // Include if athlete is within 2 years of anyone who could be in this category
-      return diffToMin <= 2 || diffToMax <= 2 || (athleteAge >= minAge && athleteAge <= maxAge + 0.99);
-    });
-
-    console.log('  Age categories within 2-year span:', ageCatsWithinSpan.map(c => c.n));
-
-    // For each matching age category, check for merge opportunities
-    ageCatsWithinSpan.forEach((cat, idx) => {
-      // Skip the athlete's own age category (already handled in main loop)
-      if (cat.n === athlete.ageCategory) {
-        return;
+    // Determine which genders to search (include opposite gender for U12 and under automatically in smart matching)
+    let gendersToSearch = [gender];
+    const athleteActualAge = exactAge.years;
+    // For smart matching, automatically search opposite gender for athletes ≤12 years old
+    const allowCrossGender = athleteActualAge <= 12 && (gender === 'MALE' || gender === 'FEMALE');
+    console.log('  Cross-gender check: age=' + athleteActualAge.toFixed(1) + ', gender=' + gender);
+    if (allowCrossGender) {
+      const oppositeGender = gender === 'MALE' ? 'FEMALE' : 'MALE';
+      gendersToSearch.push(oppositeGender);
+      console.log('  ✅ ENABLED cross-gender search - will search both', gender, 'and', oppositeGender, '(athlete is ≤12 years old)');
+    } else {
+      if (athleteActualAge > 12) {
+        console.log('  ❌ Cross-gender search DISABLED - athlete is', athleteActualAge.toFixed(1), 'years old (>12)');
+      } else {
+        console.log('  ❌ Cross-gender search DISABLED - gender is', gender);
       }
+    }
 
-      console.log('  Checking DOB merge into', cat.n);
+    let foundCount = 0;
+    const globalSeenOpponents = new Set(); // Track opponents across ALL searches to prevent duplicates
 
-      // Get weight table for this age category
-      const weightTable = WEIGHTS[gender][cat.n];
-      if (!weightTable || weightTable.length === 0) {
-        console.log('    No weight table for', gender, cat.n);
-        return;
-      }
+    // For each gender, search all age categories and weight classes
+    gendersToSearch.forEach((searchGender) => {
+      const isCrossGender = searchGender !== gender;
+      console.log('  Searching discipline:', disciplineKey, '- Gender:', searchGender, isCrossGender ? '(CROSS-GENDER)' : '');
 
-      const wc = getOwnAndUpWeightClasses(weight, weightTable);
-      console.log('    Weight classes:', wc);
+      ageCatsToSearch.forEach((cat) => {
 
-      if (wc.own) {
-        // Generate category label
-        const categoryLabel = formatCategoryLabel(cat, gender, disciplineKey);
-        const ageDisplay = formatAgeDisplay(cat.n);
-        const weightDisplay = wc.own.type === "plus"
-          ? "(+)" + wc.own.value + " kg"
-          : "-" + wc.own.value + " kg";
-
-        let fullCategory = categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
-
-        // Check if this category has athletes
-        const athleteCount = getCategoryCount(fullCategory, allCategories, athlete);
-        console.log('    Athletes in', fullCategory + ':', athleteCount);
-
-        if (athleteCount >= 1) {
-          console.log('    -> Adding DOB-based merge option');
-          addMerge({
-            category: fullCategory,
-            type: 'DOB-based age match (within 2 years)',
-            athlete: athlete,
-            athleteCount: athleteCount,
-            isDOBBased: true,
-            crossAgeCategory: true,
-            requiresWeightCheck: wc.own.type === "plus",
-            warning: wc.own.type === "plus" ? "⚠️ Please check actual weight is below -" + wc.own.value + " kg" : undefined
-          }, true); // Mark as special - only show if no regular options
+        // Get weight table for this age category
+        const weightTable = WEIGHTS[searchGender][cat.n];
+        if (!weightTable || weightTable.length === 0) {
+          console.log('    No weight table for', searchGender, cat.n);
+          return;
         }
-      }
 
-      // Also check weight move-ups in DOB-matched categories
-      if (wc.up && wc.up.length > 0) {
-        wc.up.forEach(upWeight => {
-          const weightDisplay = upWeight.type === "plus"
-            ? "(+)" + upWeight.value + " kg"
-            : "-" + upWeight.value + " kg";
+      console.log('    Checking age category', cat.n, '- has', weightTable.length, 'weight classes');
 
-          const categoryLabel = formatCategoryLabel(cat, gender, disciplineKey);
-          const ageDisplay = formatAgeDisplay(cat.n);
-          let fullCategory = categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay;
+      // Check EVERY weight class in this age category
+      let checkedFirst = false;
+      weightTable.forEach((weightValue, weightIdx) => {
+        const categoryLabel = formatCategoryLabel(cat, searchGender, disciplineKey); // Use searchGender for cross-gender search
+        const ageDisplay = formatAgeDisplay(cat.n);
 
-          const athleteCount = getCategoryCount(fullCategory, allCategories, athlete);
+        // Check if this is the last weight (plus weight)
+        const isPlus = weightIdx === weightTable.length - 1;
+        const weightDisplay = isPlus
+          ? "(+)" + weightValue + " kg"
+          : "-" + weightValue + " kg";
 
-          if (athleteCount >= 1) {
-            console.log('    -> Adding DOB-based weight move-up');
-            addMerge({
-              category: fullCategory,
-              type: 'DOB-based age match + weight move-up',
-              athlete: athlete,
-              athleteCount: athleteCount,
-              isDOBBased: true,
-              crossAgeCategory: true,
-              requiresWeightCheck: upWeight.type === "plus",
-              warning: upWeight.type === "plus" ? "⚠️ Please check actual weight is below -" + upWeight.value + " kg" : undefined
-            }, true); // Mark as special - only show if no regular options
-          }
+        // For Newaza/BJJ, search across all belt divisions (unless belts are removed)
+        let categoriesToSearch = [];
+        if (disciplineKey === 'NEWAZA' && beltHandlingMode === 'keep') {
+          // Search across all belt divisions
+          const possibleBelts = ["ALL KIDS BELTS", "White", "Grey", "Yellow", "Orange", "Blue", "Purple", "Brown", "Black"];
+          possibleBelts.forEach(belt => {
+            categoriesToSearch.push(categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay + ' / ' + belt);
+          });
+        } else {
+          // Fighting doesn't have belts, or belts have been removed
+          categoriesToSearch.push(categoryLabel + ' / ' + ageDisplay + ' / ' + weightDisplay);
+        }
+
+        // Get ALL athletes across all belt divisions in this category (excluding current athlete)
+        let athletesInCategory = [];
+        const seenAthleteNames = new Set(); // Track which athletes we've already added
+        categoriesToSearch.forEach(catStr => {
+          const athletes = getCategoryAthletes(catStr, allCategories, athlete);
+          // Only add athletes we haven't seen yet (deduplicate by name)
+          athletes.forEach(ath => {
+            if (!seenAthleteNames.has(ath.name)) {
+              athletesInCategory.push(ath);
+              seenAthleteNames.add(ath.name);
+            }
+          });
         });
-      }
+
+        // Debug first category in each age group
+        if (!checkedFirst) {
+          console.log('      Example:', categoriesToSearch[0], '→ Athletes:', athletesInCategory.length);
+          checkedFirst = true;
+        }
+
+        // Add each individual athlete as a separate match option
+        if (athletesInCategory.length > 0) {
+          athletesInCategory.forEach(opponentAthlete => {
+            // Check if we've already added this opponent (prevent duplicates across all searches)
+            if (globalSeenOpponents.has(opponentAthlete.name)) {
+              return; // Skip this opponent, already added
+            }
+            globalSeenOpponents.add(opponentAthlete.name);
+
+            foundCount++;
+            // Use the opponent's actual registered category (which includes their belt if applicable)
+            console.log('    ✓ Found opponent:', opponentAthlete.name, 'in', opponentAthlete.registeredCategory);
+
+            // Store opponent info for proximity scoring
+            addMerge({
+              category: opponentAthlete.registeredCategory,
+              type: 'Fairest opponent match',
+              athlete: athlete,
+              opponentAthlete: opponentAthlete, // Store the specific opponent
+              opponentName: opponentAthlete.name,
+              athleteCount: athletesInCategory.length, // Total athletes in this category
+              isDOBBased: true,
+              crossAgeCategory: cat.n !== athlete.ageCategory,
+              requiresWeightCheck: isPlus,
+              warning: isPlus ? "⚠️ Please check actual weight is below -" + weightValue + " kg" : undefined
+            }, true); // Mark as special - will be scored and sorted
+          });
+        }
+      });
+      });
     });
+
+    console.log('  Total individual opponents found:', foundCount);
+    }
   }
 
   // Cross-gender merge logic for U8/U10/U12 when enabled
@@ -5187,7 +5347,7 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
               category: fullCategory,
               type: 'Cross-gender merge - MIXED',
               athlete: athlete,
-              athleteCount: oppositeGenderCount,
+              athleteCount: oppositeGenderCount + 1, // Include current athlete + opposite gender athletes
               isMixed: true,
               requiresWeightCheck: wc.own.type === "plus",
               warning: wc.own.type === "plus" ? "⚠️ Please check actual weight is below -" + wc.own.value + " kg" : undefined
@@ -5218,7 +5378,7 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
                 category: fullCategory,
                 type: 'Weight move-up + Cross-gender - MIXED',
                 athlete: athlete,
-                athleteCount: oppositeGenderCount,
+                athleteCount: oppositeGenderCount + 1, // Include current athlete + opposite gender athletes
                 isMixed: true,
                 requiresWeightCheck: upWeight.type === "plus",
                 warning: upWeight.type === "plus" ? "⚠️ Please check actual weight is below -" + upWeight.value + " kg" : undefined
@@ -5230,17 +5390,225 @@ function findMergeOptions(athlete, eventYear, allCategories, beltHandlingMode = 
     });
   }
 
-  // Only include special merges (cross-gender and exact DOB) if athlete has no regular merge options
-  // This ensures these options only appear for athletes who would otherwise have "No Options"
+  // Include cross-gender merges when the option is enabled
+  // Keep DOB merges SEPARATE - they should only appear in the "No Merge" tab
   let finalMerges = merges;
-  if (merges.length === 0 && specialMerges.length > 0) {
-    console.log('No regular merges found, including', specialMerges.length, 'special merges (cross-gender/DOB) for', athlete.name);
-    finalMerges = specialMerges;
-  } else if (merges.length > 0) {
-    console.log('Found', merges.length, 'regular merges for', athlete.name, '- excluding', specialMerges.length, 'special merges');
+  let smartMatches = []; // Keep smart matches separate
+
+  if (specialMerges.length > 0) {
+    // Separate cross-gender and DOB merges
+    const crossGenderMerges = specialMerges.filter(m => m.isMixed);
+    const dobMerges = specialMerges.filter(m => m.isDOBBased);
+
+    // Always include cross-gender merges if allowGenderMergeU12 is enabled
+    if (allowGenderMergeU12 && crossGenderMerges.length > 0) {
+      console.log('Including', crossGenderMerges.length, 'cross-gender merges for', athlete.name);
+      finalMerges = merges.concat(crossGenderMerges);
+    }
+
+    // Store DOB merges separately - they will ONLY be shown in "No Merge" tab
+    // Smart matches should be available for ALL athletes when smart matching is enabled
+    if (dobMerges.length > 0) {
+      console.log('Storing', dobMerges.length, 'smart match options for', athlete.name, '(Regular merges:', merges.length + ')');
+      console.log('Smart match opponents:', dobMerges.map(m => m.opponentName + ' (' + m.category + ')').slice(0, 10));
+      smartMatches = dobMerges; // Store separately, don't add to finalMerges
+    }
   }
 
-  return { merges: finalMerges, reasons, blockedByDuplicate };
+  // When smart matching is enabled, ONLY score smart matches (for "No Merge" athletes)
+  // Don't score regular merges - only help athletes who have no regular options
+  if (useExactDOB && exactAge && weight > 0 && smartMatches.length > 0) {
+    console.log('Scoring', smartMatches.length, 'smart match options by age + weight proximity for', athlete.name);
+
+    // Score the smart matches based on INDIVIDUAL opponent
+    const scoredSmartMatches = smartMatches.map(merge => {
+      const scoreData = calculateIndividualProximityScore(
+        merge.opponentAthlete,
+        athlete,
+        exactAge.years,
+        weight,
+        eventYear
+      );
+      return {
+        ...merge,
+        proximityScore: scoreData.score,
+        opponentAge: scoreData.opponentAge,
+        opponentWeight: scoreData.opponentWeight,
+        ageDifference: scoreData.ageDifference,
+        weightDifference: scoreData.weightDifference,
+        isCrossGender: scoreData.isCrossGender
+      };
+    });
+
+    // Sort smart matches by proximity score (lower is better - closer match)
+    scoredSmartMatches.sort((a, b) => {
+      if (a.proximityScore === undefined && b.proximityScore === undefined) return 0;
+      if (a.proximityScore === undefined) return 1;
+      if (b.proximityScore === undefined) return -1;
+      return a.proximityScore - b.proximityScore;
+    });
+
+    console.log('Smart match options sorted by proximity (top 10):', scoredSmartMatches.slice(0, 10).map(m => ({
+      opponent: m.opponentName,
+      opponentAge: m.opponentAge?.toFixed(1),
+      opponentWeight: m.opponentWeight?.toFixed(1),
+      category: m.category,
+      score: m.proximityScore?.toFixed(2),
+      ageDiff: m.ageDifference?.toFixed(2),
+      weightDiff: m.weightDifference?.toFixed(1)
+    })));
+
+    // Replace smartMatches with scored versions
+    smartMatches = scoredSmartMatches;
+  }
+
+  return { merges: finalMerges, reasons, blockedByDuplicate, smartMatches };
+}
+
+/**
+ * Calculate proximity score between two INDIVIDUAL athletes based on age and weight differences
+ * Lower score = better match (closer in age and weight)
+ * @param {Object} opponentAthlete - The opponent athlete object
+ * @param {Object} athlete - The current athlete object
+ * @param {number} athleteAge - Current athlete's exact age in years
+ * @param {number} athleteWeight - Current athlete's weight in kg
+ * @param {number} eventYear - Event year for age calculations
+ * @returns {Object} Score data with opponent details and differences
+ */
+function calculateIndividualProximityScore(opponentAthlete, athlete, athleteAge, athleteWeight, eventYear) {
+  // Calculate opponent's exact age
+  let opponentAge = null;
+  if (opponentAthlete.birthDate) {
+    const birthDate = parseBirthDate(opponentAthlete.birthDate);
+    const age = calculateExactAge(birthDate, eventYear);
+    if (age && age.years > 0) {
+      opponentAge = age.years;
+    }
+  }
+
+  // Get opponent's weight
+  let opponentWeight = null;
+  if (opponentAthlete.weight && parseFloat(opponentAthlete.weight) > 0) {
+    opponentWeight = parseFloat(opponentAthlete.weight);
+  }
+
+  // Calculate SIGNED differences (opponent - athlete)
+  // Positive = opponent is older/heavier, Negative = opponent is younger/lighter
+  let signedAgeDiff = 0;
+  let signedWeightDiff = 0;
+  let absAgeDiff = 0;
+  let absWeightDiff = 0;
+
+  if (opponentAge !== null) {
+    signedAgeDiff = opponentAge - athleteAge; // Signed difference for display
+    absAgeDiff = Math.abs(signedAgeDiff); // Absolute difference for scoring
+  } else {
+    // If no valid age for opponent, use HEAVY penalty to push to bottom
+    absAgeDiff = 999; // Massive penalty for unknown age - will appear last
+    signedAgeDiff = 999;
+  }
+
+  if (opponentWeight !== null) {
+    signedWeightDiff = opponentWeight - athleteWeight; // Signed difference for display
+    absWeightDiff = Math.abs(signedWeightDiff); // Absolute difference for scoring
+  } else {
+    // If no valid weight for opponent, use HEAVY penalty
+    absWeightDiff = 999; // Massive penalty for unknown weight - will appear last
+    signedWeightDiff = 999;
+  }
+
+  // Combined score (equal weighting: 1 year = 1 point, 1 kg = 1 point)
+  let score = absAgeDiff + absWeightDiff;
+
+  // Add small penalty for cross-gender matches (prefer same gender when age/weight is similar)
+  const isCrossGender = athlete.gender !== opponentAthlete.gender;
+  if (isCrossGender) {
+    score += 0.5; // Add 0.5 points penalty (equivalent to 0.5 years or 0.5 kg difference)
+  }
+
+  return {
+    score: score,
+    opponentAge: opponentAge,
+    opponentWeight: opponentWeight,
+    ageDifference: signedAgeDiff, // Return signed difference for display
+    weightDifference: signedWeightDiff, // Return signed difference for display
+    isCrossGender: isCrossGender
+  };
+}
+
+/**
+ * Calculate proximity score for a merge option based on age and weight differences (LEGACY - for category averages)
+ * Lower score = better match (closer in age and weight)
+ * @param {string} targetCategory - The category to merge into
+ * @param {Object} athlete - The athlete object
+ * @param {number} athleteAge - Athlete's exact age in years
+ * @param {number} athleteWeight - Athlete's weight in kg
+ * @param {Array} allCategories - All category data
+ * @param {number} eventYear - Event year for age calculations
+ * @returns {number} Proximity score (lower is better)
+ */
+function calculateProximityScore(targetCategory, athlete, athleteAge, athleteWeight, allCategories, eventYear) {
+  // Get all athletes in the target category (excluding the current athlete)
+  const targetAthletes = getCategoryAthletes(targetCategory, allCategories, athlete);
+
+  if (targetAthletes.length === 0) {
+    return 999; // No athletes to compare against
+  }
+
+  // Calculate average age and weight of athletes in target category
+  let totalAge = 0;
+  let totalWeight = 0;
+  let validAgeCount = 0;
+  let validWeightCount = 0;
+
+  targetAthletes.forEach(targetAthlete => {
+    // Calculate target athlete's exact age
+    if (targetAthlete.birthDate) {
+      const birthDate = parseBirthDate(targetAthlete.birthDate);
+      const age = calculateExactAge(birthDate, eventYear);
+      if (age && age.years > 0) {
+        totalAge += age.years;
+        validAgeCount++;
+      }
+    }
+
+    // Get target athlete's weight
+    if (targetAthlete.weight && parseFloat(targetAthlete.weight) > 0) {
+      totalWeight += parseFloat(targetAthlete.weight);
+      validWeightCount++;
+    }
+  });
+
+  // Calculate differences
+  let ageDiff = 0;
+  let weightDiff = 0;
+
+  if (validAgeCount > 0) {
+    const avgAge = totalAge / validAgeCount;
+    ageDiff = Math.abs(athleteAge - avgAge);
+  } else {
+    // If no valid ages in target, use category age range as fallback
+    ageDiff = 2; // Penalty for unknown ages
+  }
+
+  if (validWeightCount > 0) {
+    const avgWeight = totalWeight / validWeightCount;
+    weightDiff = Math.abs(athleteWeight - avgWeight);
+  } else {
+    // If no valid weights in target, penalty
+    weightDiff = 5; // Penalty for unknown weights (5kg)
+  }
+
+  // Normalize the scores to make them comparable
+  // Age difference: 1 year = 1 point
+  // Weight difference: 1 kg = 1 point (equal weighting as requested)
+  const normalizedAgeDiff = ageDiff;
+  const normalizedWeightDiff = weightDiff;
+
+  // Combined score (equal weighting)
+  const score = normalizedAgeDiff + normalizedWeightDiff;
+
+  return score;
 }
 
 /**
@@ -5301,6 +5669,7 @@ let csvRecommendationTargets = new Set(); // Store recommendation targets
 let csvMultiDisciplineMap = new Map(); // Track athletes in multiple disciplines
 let csvDuplicateMap = new Map(); // Track actual duplicate registrations
 let originalCSVData = null; // Store original CSV data for formatted export
+let csvEventYear = new Date().getFullYear(); // Event year for age calculations
 
 function exportBracketsCSV() {
   console.log('📥 Exporting brackets CSV...');
@@ -5582,7 +5951,7 @@ function formatOriginalCSV() {
   reader.readAsText(file);
 }
 
-function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, useSmartRecommendations, secondMatches = [], duplicateRestrictions = null, allCategories = {}, allowGenderMergeU12 = false, useExactDOB = false) {
+function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, useSmartRecommendations, secondMatches = [], duplicateRestrictions = null, allCategories = {}, smartMatchingEnabled = false, allowGenderMergeU12 = false, useExactDOB = false) {
   // Store currently active tab before re-rendering
   let currentActiveTab = null;
   const activeTabElement = document.querySelector('.csv-tab.active');
@@ -5733,7 +6102,7 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       const escapedCategory = rec.category.replace(/'/g, "&apos;");
       const mergeId = 'merge-rec-' + item.category.replace(/[^a-zA-Z0-9]/g, '-');
       itemHtml += '    <div class="merge-category" id="' + mergeId + '" style="border-left: 4px solid #10b981;">';
-      itemHtml += '      <div class="merge-category-content" onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\')">';
+      itemHtml += '      <div class="merge-category-content">';
       itemHtml += '        <div class="merge-text">' + rec.category;
       if (rec.isMixed) {
         itemHtml += ' <span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">MIXED</span>';
@@ -5743,7 +6112,8 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       }
       itemHtml += ' <button onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\'); event.stopPropagation();" style="display: inline; width: auto; padding: 4px 8px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: background 0.2s; vertical-align: baseline;" onmouseover="this.style.background=\'#059669\'" onmouseout="this.style.background=\'#10b981\'">📋</button></div>';
       itemHtml += '        <div class="merge-type">' + rec.type + ' • ' + rec.athleteCount + ' athletes</div>';
-      itemHtml += generateAthleteListDropdown(rec.category, item.athlete, mergeId + '-athletes');
+      const athleteDropdown1 = generateAthleteListDropdown(rec.category, item.athlete, mergeId + '-athletes');
+      itemHtml += athleteDropdown1;
       itemHtml += '        <div style="color: #64748b; font-size: 11px; margin-top: 4px;">' + item.recommendation.reason + '</div>';
       if (rec.warning) {
         itemHtml += '        <div style="color: #f59e0b; font-size: 11px; margin-top: 4px; font-weight: 500;">' + rec.warning + '</div>';
@@ -5769,7 +6139,7 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
         const escapedCategory = rec.category.replace(/'/g, "&apos;");
         const mergeId = 'merge-rec-' + item.category.replace(/[^a-zA-Z0-9]/g, '-');
         itemHtml += '    <div class="merge-category" id="' + mergeId + '" style="border-left: 4px solid #10b981;">';
-        itemHtml += '      <div class="merge-category-content" onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\')">';
+        itemHtml += '      <div class="merge-category-content">';
         itemHtml += '        <div class="merge-text">' + rec.category;
         if (rec.isMixed) {
           itemHtml += ' <span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">MIXED</span>';
@@ -5779,7 +6149,8 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
         }
         itemHtml += ' <button onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\'); event.stopPropagation();" style="display: inline; width: auto; padding: 4px 8px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: background 0.2s; vertical-align: baseline;" onmouseover="this.style.background=\'#059669\'" onmouseout="this.style.background=\'#10b981\'">📋</button></div>';
         itemHtml += '        <div class="merge-type">' + rec.type + ' • ' + rec.athleteCount + ' athletes</div>';
-        itemHtml += generateAthleteListDropdown(rec.category, item.athlete, mergeId + '-athletes');
+        const athleteDropdown2 = generateAthleteListDropdown(rec.category, item.athlete, mergeId + '-athletes');
+        itemHtml += athleteDropdown2;
         itemHtml += '        <div style="color: #64748b; font-size: 11px; margin-top: 4px;">' + item.recommendation.reason + '</div>';
         if (rec.warning) {
           itemHtml += '        <div style="color: #f59e0b; font-size: 11px; margin-top: 4px; font-weight: 500;">' + rec.warning + '</div>';
@@ -5801,8 +6172,9 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
           const escapedCategory = merge.category.replace(/'/g, "&apos;");
           const mergeId = 'merge-' + item.category.replace(/[^a-zA-Z0-9]/g, '-') + '-' + mergeIdx;
           itemHtml += '    <div class="merge-category" id="' + mergeId + '">';
-          itemHtml += '      <div class="merge-category-content" onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\')">';
-          itemHtml += '        <div class="merge-text">' + merge.category;
+          itemHtml += '      <div class="merge-category-content">';
+          itemHtml += '        <div class="hoverable-content">';
+          itemHtml += '          <div class="merge-text">' + merge.category;
           if (merge.isMixed) {
             itemHtml += ' <span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">MIXED</span>';
           }
@@ -5810,13 +6182,35 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
             itemHtml += ' <span style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px;">DOB-MATCHED</span>';
           }
           itemHtml += ' <button onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\'); event.stopPropagation();" style="display: inline; width: auto; padding: 4px 8px; background: #334155; color: #cbd5e1; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: background 0.2s; vertical-align: baseline;" onmouseover="this.style.background=\'#475569\'" onmouseout="this.style.background=\'#334155\'">📋</button></div>';
-          itemHtml += '        <div class="merge-type">' + merge.type + ' • ' + merge.athleteCount + ' athletes</div>';
-          itemHtml += generateAthleteListDropdown(merge.category, item.athlete, mergeId + '-athletes');
+          itemHtml += '          <div class="merge-type">' + merge.type + ' • ' + merge.athleteCount + ' athletes</div>';
+
           if (merge.warning) {
-            itemHtml += '        <div style="color: #f59e0b; font-size: 11px; margin-top: 4px; font-weight: 500;">' + merge.warning + '</div>';
+            itemHtml += '          <div style="color: #f59e0b; font-size: 11px; margin-top: 4px; font-weight: 500;">' + merge.warning + '</div>';
           }
           if (merge.isMixed) {
-            itemHtml += '        <div style="background: #fee2e2; border-left: 3px solid #dc2626; padding: 8px; margin-top: 8px; font-size: 11px; color: #dc2626; border-radius: 4px;"><strong>⚠️ REGULATORY CHECK REQUIRED</strong><br>This merge combines male and female athletes. Verify competition rules permit mixed divisions for this age group.</div>';
+            itemHtml += '          <div style="background: #fee2e2; border-left: 3px solid #dc2626; padding: 8px; margin-top: 8px; font-size: 11px; color: #dc2626; border-radius: 4px;"><strong>⚠️ REGULATORY CHECK REQUIRED</strong><br>This merge combines male and female athletes. Verify competition rules permit mixed divisions for this age group.</div>';
+          }
+          itemHtml += '        </div>';
+
+          // For mixed gender merges with multiple athletes, show the athletes in the bracket (INSIDE merge-category-content but OUTSIDE hover wrapper)
+          if (merge.isMixed && merge.athleteCount > 1) {
+            const athletes = getCategoryAthletes(merge.category, csvAllCategories, item.athlete);
+            if (athletes.length > 0) {
+              // Get the common category from first athlete
+              const bracketCategory = athletes[0].registeredCategory;
+              const escapedBracketCategory = bracketCategory.replace(/'/g, "&apos;");
+
+              itemHtml += '        <div class="no-hover-effect" style="margin-top: 8px; padding: 8px; background: #0f172a; border-radius: 4px; border: 1px solid #334155; cursor: default;">';
+              itemHtml += '          <div style="font-size: 11px; color: #e2e8f0; font-weight: 500; margin-bottom: 4px;">Athletes in this bracket: <span style="color: #cbd5e1;">' + bracketCategory + '</span> <button onclick="event.stopPropagation(); navigator.clipboard.writeText(\'' + escapedBracketCategory.replace(/&apos;/g, "'") + '\').then(() => console.log(\'Copied: ' + bracketCategory + '\')).catch(err => alert(\'Copy failed\'));" title="Copy bracket category" style="width: auto; padding: 2px 6px; font-size: 10px; background: transparent; color: #94a3b8; border: 1px solid #475569; cursor: pointer; border-radius: 3px; margin-left: 4px;">copy</button></div>';
+              athletes.forEach((athlete, idx) => {
+                const escapedAthleteName = athlete.name.replace(/'/g, "&apos;");
+                itemHtml += '          <div style="padding: 4px; ' + (idx < athletes.length - 1 ? 'border-bottom: 1px solid #1e293b;' : '') + '">';
+                itemHtml += '            <span style="font-size: 11px; color: #e2e8f0; font-weight: 500;">' + athlete.name + '</span>';
+                itemHtml += '            <button onclick="event.stopPropagation(); copyAthleteName(\'' + escapedAthleteName + '\');" title="Copy athlete name" style="width: auto; padding: 2px 6px; font-size: 10px; background: transparent; color: #94a3b8; border: 1px solid #475569; cursor: pointer; border-radius: 3px; margin-left: 8px;">copy</button>';
+                itemHtml += '          </div>';
+              });
+              itemHtml += '        </div>';
+            }
           }
           itemHtml += '      </div>';
           itemHtml += '      <div class="merge-actions">';
@@ -5857,8 +6251,252 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       itemHtml += '  </div>';
     }
 
+    // Show smart match recommendations (ONLY in "No Merge" tab)
+    if (item.smartMatches && item.smartMatches.length > 0) {
+      itemHtml += '  <div style="margin-top: 12px; padding: 12px; background: #1e293b; border-left: 3px solid #3b82f6; border-radius: 4px;">';
+      itemHtml += '    <div style="font-size: 12px; color: #60a5fa; font-weight: 600; margin-bottom: 4px;">🎯 Smart Match Recommendations</div>';
+
+      // Show athlete's own age and weight with editable weight input
+      const athleteAge = item.athlete.exactAge ? item.athlete.exactAge.years : null;
+      let athleteWeight = item.athlete.weight ? parseFloat(item.athlete.weight) : null;
+
+      // Extract weight from category if not in athlete object (for plus weights especially)
+      if (athleteWeight === null || athleteWeight <= 0) {
+        const categoryParts = item.category.split(' / ');
+        if (categoryParts.length >= 3) {
+          const weightPart = categoryParts[2].trim();
+          const weightMatch = weightPart.match(/[\d.]+/);
+          if (weightMatch) {
+            athleteWeight = parseFloat(weightMatch[0]);
+          }
+        }
+      }
+
+      const athleteId = item.category.replace(/[^a-zA-Z0-9]/g, '-');
+      if (athleteAge !== null || athleteWeight !== null) {
+        itemHtml += '    <div style="font-size: 11px; color: #94a3b8; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">Your athlete: ';
+        if (athleteAge !== null) {
+          itemHtml += '<strong style="color: #cbd5e1;">' + item.athlete.name + '</strong> - Age: <strong style="color: #10b981;">' + athleteAge.toFixed(1) + ' years</strong>';
+        }
+        if (athleteWeight !== null && athleteWeight > 0) {
+          if (athleteAge !== null) itemHtml += ', ';
+          itemHtml += 'Weight: <input type="number" id="actual-weight-' + athleteId + '" data-category="' + item.category.replace(/"/g, '&quot;') + '" value="' + athleteWeight.toFixed(1) + '" step="0.1" min="0" style="width: 60px; padding: 2px 4px; border: 1px solid #475569; background: #0f172a; color: #10b981; border-radius: 3px; font-weight: bold;" onchange="updateSmartMatches(\'' + athleteId + '\')" /> <strong style="color: #10b981;">kg</strong>';
+          itemHtml += ' <span style="font-size: 10px; color: #64748b;">(edit for more accurate matches)</span>';
+        }
+        itemHtml += '</div>';
+      }
+
+      itemHtml += '    <div style="font-size: 11px; color: #94a3b8; margin-bottom: 12px;">Ranked by age + weight proximity (closest opponents first):</div>';
+
+      // Show top 5 matches (or all if less than 5)
+      const matchesToShow = item.smartMatches.slice(0, 5);
+      matchesToShow.forEach((match, idx) => {
+        const escapedCategory = match.category.replace(/'/g, "&apos;");
+        const escapedOpponentName = match.opponentName.replace(/'/g, "&apos;");
+        const mergeId = 'smart-' + item.category.replace(/[^a-zA-Z0-9]/g, '-') + '-' + idx;
+
+        // Create Show Match bracket name (remove weight class, show age range using actual ages)
+        const opponentParts = match.category.split(' / ');
+        let bracketName = 'Show Match';
+
+        // Keep discipline and replace gender with MIXED if cross-gender
+        if (opponentParts.length >= 1) {
+          let disciplineGenderPart = opponentParts[0];
+
+          // If cross-gender match, replace gender (MALE/FEMALE) with MIXED
+          if (match.isCrossGender) {
+            disciplineGenderPart = disciplineGenderPart.replace(/\bMALE\b/, 'MIXED').replace(/\bFEMALE\b/, 'MIXED');
+          }
+
+          bracketName = 'Show Match ' + disciplineGenderPart;
+
+          // Add age range using actual ages if both available
+          const athleteActualAge = item.athlete.exactAge ? item.athlete.exactAge.years : null;
+          const opponentActualAge = match.opponentAge;
+
+          // Debug logging
+          if (match.opponentName === 'Thea Taylor') {
+            console.log('DEBUG Thea Taylor:', {
+              athleteActualAge,
+              opponentActualAge,
+              bothNotNull: (athleteActualAge !== null && opponentActualAge !== null),
+              opponentAgeType: typeof opponentActualAge
+            });
+          }
+
+          if (athleteActualAge !== null && opponentActualAge !== null && opponentActualAge !== undefined) {
+            // Round to 1 decimal place (same as display), then floor to get bracket age
+            // This ensures bracket ages match what user sees (10.97 displays as "11.0", so bracket shows 11)
+            const athleteDisplayAge = parseFloat(athleteActualAge.toFixed(1));
+            const opponentDisplayAge = parseFloat(opponentActualAge.toFixed(1));
+            const athleteAgeFloor = Math.floor(athleteDisplayAge);
+            const opponentAgeFloor = Math.floor(opponentDisplayAge);
+            const minAge = Math.min(athleteAgeFloor, opponentAgeFloor);
+            const maxAge = Math.max(athleteAgeFloor, opponentAgeFloor);
+
+            if (match.opponentName === 'Thea Taylor') {
+              console.log('DEBUG Thea Taylor ages:', {
+                athleteActualAge,
+                opponentActualAge,
+                athleteDisplayAge,
+                opponentDisplayAge,
+                athleteAgeFloor,
+                opponentAgeFloor,
+                minAge,
+                maxAge,
+                equal: minAge === maxAge
+              });
+            }
+
+            // Only show range if ages are different
+            if (minAge !== maxAge) {
+              bracketName += ' / ' + minAge + '-' + maxAge + ' years';
+            } else {
+              bracketName += ' / ' + minAge + ' years';
+            }
+          } else {
+            // Fallback to age category if actual ages not available
+            const opponentAgeCategory = opponentParts.length >= 2 ? opponentParts[1].trim() : '';
+            if (opponentAgeCategory) {
+              bracketName += ' / ' + opponentAgeCategory;
+            }
+          }
+        }
+
+        itemHtml += '    <div class="merge-category" id="' + mergeId + '" style="margin-bottom: 8px; border-left: 4px solid #3b82f6;">';
+        itemHtml += '      <div class="merge-category-content">';
+        itemHtml += '        <div style="cursor: default;">'; // Remove onclick from wrapper - no copy on click
+
+        // Opponent name with rank and score
+        itemHtml += '          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">';
+        itemHtml += '            <span style="background: #1e40af; color: #dbeafe; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">#' + (idx + 1) + '</span>';
+        itemHtml += '            <span style="font-size: 13px; font-weight: 600; color: #000000;">' + match.opponentName + '</span>';
+        if (match.proximityScore !== undefined) {
+          // Convert proximity score to percentage (lower score = higher percentage)
+          // Max reasonable difference: 2 years + 18 kg = 20 points = 0%
+          // Perfect match: 0 points = 100%
+          const maxScore = 20;
+          const matchPercentage = Math.max(0, Math.min(100, 100 - (match.proximityScore / maxScore * 100)));
+          const percentColor = matchPercentage >= 75 ? '#10b981' : matchPercentage >= 50 ? '#f59e0b' : '#ef4444';
+          itemHtml += '            <span style="background: #0f172a; color: ' + percentColor + '; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 500;">Match Quality: ' + matchPercentage.toFixed(0) + '%</span>';
+        }
+        itemHtml += '            <button onclick="copyAthleteName(\'' + escapedOpponentName + '\');" title="Copy opponent name" style="width: auto; padding: 2px 6px; font-size: 10px; background: transparent; color: #94a3b8; border: 1px solid #cbd5e1; cursor: pointer; border-radius: 3px;">copy name</button>';
+        itemHtml += '          </div>';
+
+        // Opponent details (age, weight, differences)
+        itemHtml += '          <div style="display: flex; gap: 12px; margin-bottom: 6px; font-size: 11px;">';
+        if (match.opponentAge !== null && match.opponentAge !== undefined) {
+          itemHtml += '            <span style="color: #000000;">Age: <strong>' + match.opponentAge.toFixed(1) + ' years</strong></span>';
+          if (match.ageDifference !== undefined && match.ageDifference < 999) {
+            const sign = match.ageDifference >= 0 ? '+' : '';
+            const diffValue = match.ageDifference.toFixed(1);
+            const color = match.ageDifference > 0 ? '#d97706' : '#1e40af'; // Darker orange for older, darker blue for younger
+            itemHtml += '            <span style="color: ' + color + ';">(Diff: ' + sign + diffValue + ' years)</span>';
+          }
+        }
+        if (match.opponentWeight !== null && match.opponentWeight !== undefined) {
+          itemHtml += '            <span style="color: #000000;">Weight: <strong>' + match.opponentWeight.toFixed(1) + ' kg</strong></span>';
+          if (match.weightDifference !== undefined && match.weightDifference < 999) {
+            const sign = match.weightDifference >= 0 ? '+' : '';
+            const diffValue = match.weightDifference.toFixed(1);
+            const color = match.weightDifference > 0 ? '#d97706' : '#1e40af'; // Darker orange for heavier, darker blue for lighter
+            itemHtml += '            <span style="color: ' + color + ';">(Diff: ' + sign + diffValue + ' kg)</span>';
+          }
+        }
+        itemHtml += '          </div>';
+
+        // Suggested bracket name with copy button
+        itemHtml += '          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
+        itemHtml += '            <span style="font-size: 11px; color: #000000;">Suggested bracket: <strong style="color: #000000;">' + bracketName + '</strong></span>';
+        const escapedBracketName = bracketName.replace(/'/g, "&apos;");
+        itemHtml += '            <button onclick="copyMergeCategory(\'' + escapedBracketName + '\', \'' + mergeId + '\');" style="display: inline; width: auto; padding: 2px 6px; background: transparent; color: #94a3b8; border: 1px solid #475569; cursor: pointer; font-size: 10px; border-radius: 3px;">copy bracket</button>';
+        itemHtml += '          </div>';
+
+        itemHtml += '          <div class="merge-type" style="margin-top: 4px;">' + match.type + ' • ' + match.athleteCount + ' athletes in original category</div>';
+        if (match.warning) {
+          itemHtml += '          <div style="color: #f59e0b; font-size: 11px; margin-top: 4px; font-weight: 500;">' + match.warning + '</div>';
+        }
+        itemHtml += '        </div>';
+        itemHtml += '      </div>';
+        itemHtml += '      <div class="merge-actions">';
+        itemHtml += '        <label style="font-size: 11px; color: #64748b; cursor: pointer; user-select: none; display: inline-flex; align-items: center;">';
+        itemHtml += '          <input type="checkbox" class="merge-checkbox" onchange="toggleMergeComplete(\'' + mergeId + '\', \'' + escapedBracketName + '\')" style="margin-right: 4px; cursor: pointer;"><span style="white-space: nowrap;">Done</span>';
+        itemHtml += '        </label>';
+        itemHtml += '      </div>';
+        itemHtml += '    </div>';
+      });
+
+      if (item.smartMatches.length > 5) {
+        itemHtml += '    <div style="font-size: 11px; color: #64748b; margin-top: 8px; font-style: italic;">+' + (item.smartMatches.length - 5) + ' more opponents available</div>';
+      }
+
+      itemHtml += '  </div>';
+    }
+
     itemHtml += '</div>';
     return itemHtml;
+  }
+
+  /**
+   * Render reciprocal mixed merge (two athletes joining to create new MIXED bracket)
+   * @param {Object} group - Object with mixedCategory, athlete1, athlete2, totalAthletes
+   * @returns {string} HTML for the combined merge item
+   */
+  function renderReciprocalMixedMerge(group) {
+    const escapedCategory = group.mixedCategory.replace(/'/g, "&apos;");
+    const mergeId = 'mixed-reciprocal-' + group.mixedCategory.replace(/[^a-zA-Z0-9]/g, '-');
+
+    let html = '';
+    html += '<div class="category-item" style="border-left: 3px solid #f59e0b;">';
+
+    // Title showing the new MIXED category that will be created
+    html += '  <div class="category-name" style="color: #fbbf24;">🤝 ' + group.mixedCategory + '</div>';
+
+    // Show both athletes who will join
+    html += '  <div style="margin-top: 8px; padding: 12px; background: #1e293b; border-left: 3px solid #10b981; border-radius: 4px;">';
+    html += '    <div style="font-size: 12px; color: #10b981; font-weight: 600; margin-bottom: 8px;">Creating New MIXED Bracket:</div>';
+    html += '    <div style="font-size: 11px; color: #cbd5e1; margin-bottom: 6px;">Both athletes will join together to create a new mixed-gender bracket:</div>';
+
+    // Athlete 1
+    const escapedName1 = group.athlete1.athlete.name.replace(/'/g, "&apos;");
+    html += '    <div style="display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 8px; background: #0f172a; border-radius: 4px;">';
+    html += '      <div style="flex: 1;">';
+    html += '        <div style="font-size: 11px; color: #e2e8f0; font-weight: 500;">' + group.athlete1.athlete.name + '</div>';
+    html += '        <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">From: ' + group.athlete1.category + '</div>';
+    html += '      </div>';
+    html += '      <button onclick="copyAthleteName(\'' + escapedName1 + '\')" title="Copy athlete name" style="width: auto; padding: 2px 6px; font-size: 10px; margin: 0; background: transparent; color: #94a3b8; border: 1px solid #cbd5e1; cursor: pointer;">copy</button>';
+    html += '    </div>';
+
+    // Athlete 2
+    const escapedName2 = group.athlete2.athlete.name.replace(/'/g, "&apos;");
+    html += '    <div style="display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 8px; background: #0f172a; border-radius: 4px;">';
+    html += '      <div style="flex: 1;">';
+    html += '        <div style="font-size: 11px; color: #e2e8f0; font-weight: 500;">' + group.athlete2.athlete.name + '</div>';
+    html += '        <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">From: ' + group.athlete2.category + '</div>';
+    html += '      </div>';
+    html += '      <button onclick="copyAthleteName(\'' + escapedName2 + '\')" title="Copy athlete name" style="width: auto; padding: 2px 6px; font-size: 10px; margin: 0; background: transparent; color: #94a3b8; border: 1px solid #cbd5e1; cursor: pointer;">copy</button>';
+    html += '    </div>';
+
+    html += '    <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">→ Creates ' + group.totalAthletes + '-person MIXED bracket</div>';
+
+    html += '  </div>';
+
+    // Regulatory warning
+    html += '  <div style="background: #fee2e2; border-left: 3px solid #dc2626; padding: 8px; margin-top: 8px; font-size: 11px; color: #dc2626; border-radius: 4px;">';
+    html += '    <strong>⚠️ REGULATORY CHECK REQUIRED</strong><br>';
+    html += '    This merge combines male and female athletes. Verify competition rules permit mixed divisions for this age group.';
+    html += '  </div>';
+
+    // Copy button for category and Done checkbox
+    html += '  <div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between;">';
+    html += '    <button id="' + mergeId + '-copy-btn" onclick="copyMixedCategoryName(\'' + escapedCategory + '\', \'' + mergeId + '-copy-btn\')" style="padding: 6px 12px; background: #334155; color: #cbd5e1; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">📋 Copy Category Name</button>';
+    html += '    <label style="font-size: 11px; color: #64748b; cursor: pointer; user-select: none; display: inline-flex; align-items: center;">';
+    html += '      <input type="checkbox" class="merge-checkbox" onchange="toggleMergeComplete(\'' + mergeId + '\', \'' + escapedCategory + '\')" style="margin-right: 4px; cursor: pointer;"><span style="white-space: nowrap;">Done</span>';
+    html += '    </label>';
+    html += '  </div>';
+
+    html += '</div>';
+    return html;
   }
 
   // Tab navigation
@@ -5905,19 +6543,6 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       html += '</div>';
     }
 
-    // DOB-Matched tab (always shown when DOB checkbox is enabled)
-    // Exclude athletes who are incoming targets (already receiving athletes) or have smart recommendations
-    const dobMerges = withMerges.filter(m =>
-      m.merges && m.merges.some(merge => merge.isDOBBased) &&
-      !m.isIncomingTarget &&
-      !m.recommendation
-    );
-    if (useExactDOB) {
-      html += '<div class="csv-tab" data-tab="tab-dob" onclick="switchCSVTab(\'tab-dob\')">';
-      html += '  <div class="csv-tab-title">📅 DOB-Matched</div>';
-      html += '  <div class="csv-tab-count">' + dobMerges.length + '</div>';
-      html += '</div>';
-    }
   } else {
     if (withMerges.length > 0) {
       html += '<div class="csv-tab active" data-tab="tab-allmerges" onclick="switchCSVTab(\'tab-allmerges\')">';
@@ -5930,7 +6555,12 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
   if (withoutMerges.length > 0) {
     const isFirst = withMerges.length === 0;
     html += '<div class="csv-tab' + (isFirst ? ' active' : '') + '" data-tab="tab-nomerge" onclick="switchCSVTab(\'tab-nomerge\')">';
-    html += '  <div class="csv-tab-title">❌ No Merge</div>';
+    // Show different title if smart matching checkbox is enabled
+    if (smartMatchingEnabled) {
+      html += '  <div class="csv-tab-title">❌ No Merge / Show Match Options</div>';
+    } else {
+      html += '  <div class="csv-tab-title">❌ No Merge</div>';
+    }
     html += '  <div class="csv-tab-count">' + withoutMerges.length + '</div>';
     html += '</div>';
   }
@@ -6102,32 +6732,65 @@ function renderCSVResults(withMerges, ageAndWeightOnly, withoutMerges, total, us
       html += '  <div style="font-size: 11px; color: #fef3c7; margin-top: 4px;">Cross-gender merge opportunities for youth categories. These merges require regulatory approval.</div>';
       html += '</div>';
 
+      // Group reciprocal MIXED merges (where two athletes both merge to same MIXED category)
+      const processedMixedCategories = new Set();
+      const reciprocalMerges = [];
+      const singleMerges = [];
+
+      console.log('Processing', mixedMerges.length, 'mixed merge entries for grouping');
+
       mixedMerges.forEach(item => {
+        const mixedMerge = item.merges.find(m => m.isMixed);
+        if (!mixedMerge) return;
+
+        const mixedCategory = mixedMerge.category;
+        console.log('  Checking', item.athlete.name, '→', mixedCategory);
+
+        // Check if we've already processed this MIXED category
+        if (processedMixedCategories.has(mixedCategory)) {
+          console.log('    Already processed this MIXED category');
+          return; // Skip, already grouped
+        }
+
+        // Find the reciprocal athlete (opposite gender, same MIXED target)
+        const reciprocal = mixedMerges.find(other => {
+          if (other.category === item.category) return false; // Skip self
+          const otherMixedMerge = other.merges.find(m => m.isMixed);
+          return otherMixedMerge && otherMixedMerge.category === mixedCategory;
+        });
+
+        if (reciprocal) {
+          // Found reciprocal merge - group them together
+          console.log('    Found reciprocal:', reciprocal.athlete.name);
+          processedMixedCategories.add(mixedCategory);
+          reciprocalMerges.push({
+            mixedCategory: mixedCategory,
+            athlete1: item,
+            athlete2: reciprocal,
+            totalAthletes: mixedMerge.athleteCount
+          });
+        } else {
+          // No reciprocal found - show as individual
+          console.log('    No reciprocal found - showing as individual');
+          singleMerges.push(item);
+        }
+      });
+
+      console.log('Found', reciprocalMerges.length, 'reciprocal merges and', singleMerges.length, 'individual merges');
+
+      // Render reciprocal merges as combined items
+      reciprocalMerges.forEach(group => {
+        html += renderReciprocalMixedMerge(group);
+      });
+
+      // Render any individual mixed merges
+      singleMerges.forEach(item => {
         html += renderCategoryItem(item, false);
       });
 
       html += '</div>';
     }
 
-    // Tab content: DOB-Matched Merges (always shown when checkbox is enabled)
-    const dobMerges = withMerges.filter(m =>
-      m.merges && m.merges.some(merge => merge.isDOBBased) &&
-      !m.isIncomingTarget &&
-      !m.recommendation
-    );
-    if (useExactDOB) {
-      html += '<div id="tab-dob" class="csv-tab-content">';
-      html += '<div style="padding: 12px; background: #1e293b; border-left: 3px solid #3b82f6; border-radius: 4px; margin-bottom: 16px;">';
-      html += '  <div style="font-size: 12px; color: #60a5fa; font-weight: 600;">📅 DOB-Matched Merges (2-Year Age Span)</div>';
-      html += '  <div style="font-size: 11px; color: #dbeafe; margin-top: 4px;">Athletes matched based on exact date of birth within 2-year age difference, allowing cross-age-category merges.</div>';
-      html += '</div>';
-
-      dobMerges.forEach(item => {
-        html += renderCategoryItem(item, false);
-      });
-
-      html += '</div>';
-    }
   }
 
   // Tab content: Age + Weight Only
@@ -6355,7 +7018,7 @@ function searchAthlete() {
         const mergeId = 'search-merge-' + index + '-' + mergeIdx;
 
         html += '    <div class="merge-category" id="' + mergeId + '" onclick="event.stopPropagation();">';
-        html += '      <div class="merge-category-content" onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\'); event.stopPropagation();">';
+        html += '      <div class="merge-category-content">';
         html += '        <div class="merge-text">' + merge.category + ' <button onclick="copyMergeCategory(\'' + escapedCategory + '\', \'' + mergeId + '\'); event.stopPropagation();" style="display: inline; width: auto; padding: 4px 8px; background: #334155; color: #cbd5e1; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; white-space: nowrap; transition: background 0.2s; vertical-align: baseline;" onmouseover="this.style.background=\'#475569\'" onmouseout="this.style.background=\'#334155\'">📋</button></div>';
         html += '        <div class="merge-type">' + merge.type + ' • ' + merge.athleteCount + ' athletes</div>';
         if (merge.warning) {
@@ -6614,6 +7277,277 @@ function copyMergeCategory(text, mergeId) {
       alert('Failed to copy. Please copy manually: ' + decodedText);
     }
     document.body.removeChild(textArea);
+  }
+}
+
+/**
+ * Copy mixed category name (simplified version for reciprocal mixed merges)
+ * @param {string} text - Category name to copy
+ * @param {string} buttonId - ID of the button element for visual feedback
+ */
+function copyMixedCategoryName(text, buttonId) {
+  const decodedText = text.replace(/&apos;/g, "'");
+  const button = document.getElementById(buttonId);
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(decodedText)
+      .then(() => {
+        // Visual feedback
+        const originalHTML = button.innerHTML;
+        button.style.background = '#10b981';
+        button.innerHTML = '✓ Copied!';
+
+        setTimeout(() => {
+          button.style.background = '#334155';
+          button.innerHTML = originalHTML;
+        }, 1500);
+      })
+      .catch(err => {
+        console.error('Copy failed:', err);
+        alert('Failed to copy. Please try again.');
+      });
+  } else {
+    // Fallback for older browsers
+    const textArea = document.createElement('textarea');
+    textArea.value = decodedText;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      const originalHTML = button.innerHTML;
+      button.style.background = '#10b981';
+      button.innerHTML = '✓ Copied!';
+      setTimeout(() => {
+        button.style.background = '#334155';
+        button.innerHTML = originalHTML;
+      }, 1500);
+    } catch (err) {
+      alert('Failed to copy. Please copy manually: ' + decodedText);
+    }
+    document.body.removeChild(textArea);
+  }
+}
+
+function updateSmartMatches(athleteId) {
+  // Get the new actual weight from input
+  const weightInput = document.getElementById('actual-weight-' + athleteId);
+  if (!weightInput) {
+    console.error('Weight input not found:', 'actual-weight-' + athleteId);
+    return;
+  }
+
+  // Get category from data attribute
+  const category = weightInput.getAttribute('data-category');
+  if (!category) {
+    console.error('Category not found in data attribute');
+    return;
+  }
+
+  const newWeight = parseFloat(weightInput.value);
+  if (isNaN(newWeight) || newWeight <= 0) {
+    alert('Please enter a valid weight');
+    return;
+  }
+
+  console.log('Updating smart matches for:', category, 'New weight:', newWeight);
+
+  // Find the athlete in csvWithoutMerges
+  const athleteItem = csvWithoutMerges.find(item => item.category === category);
+  if (!athleteItem || !athleteItem.smartMatches) {
+    console.error('Athlete not found in csvWithoutMerges:', category);
+    console.log('Available categories:', csvWithoutMerges.map(i => i.category));
+    return;
+  }
+
+  // Get athlete's exact age
+  const athleteAge = athleteItem.athlete.exactAge ? athleteItem.athlete.exactAge.years : null;
+  if (!athleteAge) return;
+
+  // Re-score all smart matches with the new weight
+  const rescoredMatches = athleteItem.smartMatches.map(match => {
+    const scoreData = calculateIndividualProximityScore(
+      match.opponentAthlete,
+      athleteItem.athlete,
+      athleteAge,
+      newWeight,
+      csvEventYear
+    );
+    return {
+      ...match,
+      proximityScore: scoreData.score,
+      opponentAge: scoreData.opponentAge,
+      opponentWeight: scoreData.opponentWeight,
+      ageDifference: scoreData.ageDifference,
+      weightDifference: scoreData.weightDifference,
+      isCrossGender: scoreData.isCrossGender
+    };
+  });
+
+  // Sort by new scores
+  rescoredMatches.sort((a, b) => {
+    if (a.proximityScore === undefined && b.proximityScore === undefined) return 0;
+    if (a.proximityScore === undefined) return 1;
+    if (b.proximityScore === undefined) return -1;
+    return a.proximityScore - b.proximityScore;
+  });
+
+  // Update the stored data
+  athleteItem.smartMatches = rescoredMatches;
+
+  // Update only the smart match display (don't re-render entire page)
+  updateSmartMatchDisplay(athleteItem, athleteId, newWeight);
+}
+
+function updateSmartMatchDisplay(athleteItem, athleteId, athleteWeight) {
+  console.log('Updating smart match display for:', athleteId);
+
+  // Find the smart match container
+  const container = document.getElementById('actual-weight-' + athleteId);
+  if (!container) {
+    console.error('Could not find weight input container:', 'actual-weight-' + athleteId);
+    return;
+  }
+
+  // Find the parent category item
+  const categoryItem = container.closest('.category-item');
+  if (!categoryItem) {
+    console.error('Could not find category-item parent');
+    return;
+  }
+
+  // Find the smart match recommendations div (has blue left border)
+  let smartMatchDiv = categoryItem.querySelector('[style*="border-left: 3px solid #3b82f6"]');
+  if (!smartMatchDiv) {
+    console.error('Could not find smart match div');
+    return;
+  }
+
+  console.log('Found smart match div, updating with', athleteItem.smartMatches.length, 'matches');
+
+  // Rebuild the smart matches HTML (same logic as in renderCSVResults)
+  const matchesToShow = athleteItem.smartMatches.slice(0, 5);
+  let itemHtml = '';
+
+  matchesToShow.forEach((match, idx) => {
+    const escapedCategory = match.category.replace(/'/g, "&apos;");
+    const escapedOpponentName = match.opponentName.replace(/'/g, "&apos;");
+    const mergeId = 'smart-' + athleteItem.category.replace(/[^a-zA-Z0-9]/g, '-') + '-' + idx;
+
+    // Create Show Match bracket name
+    const opponentParts = match.category.split(' / ');
+    let bracketName = 'Show Match';
+
+    if (opponentParts.length >= 1) {
+      let disciplineGenderPart = opponentParts[0];
+      if (match.isCrossGender) {
+        disciplineGenderPart = disciplineGenderPart.replace(/\bMALE\b/, 'MIXED').replace(/\bFEMALE\b/, 'MIXED');
+      }
+      bracketName = 'Show Match ' + disciplineGenderPart;
+
+      const athleteActualAge = athleteItem.athlete.exactAge ? athleteItem.athlete.exactAge.years : null;
+      const opponentActualAge = match.opponentAge;
+
+      if (athleteActualAge !== null && opponentActualAge !== null && opponentActualAge !== undefined) {
+        // Round to 1 decimal place (same as display), then floor to get bracket age
+        // This ensures bracket ages match what user sees (10.97 displays as "11.0", so bracket shows 11)
+        const athleteDisplayAge = parseFloat(athleteActualAge.toFixed(1));
+        const opponentDisplayAge = parseFloat(opponentActualAge.toFixed(1));
+        const athleteAgeFloor = Math.floor(athleteDisplayAge);
+        const opponentAgeFloor = Math.floor(opponentDisplayAge);
+        const minAge = Math.min(athleteAgeFloor, opponentAgeFloor);
+        const maxAge = Math.max(athleteAgeFloor, opponentAgeFloor);
+        if (minAge !== maxAge) {
+          bracketName += ' / ' + minAge + '-' + maxAge + ' years';
+        } else {
+          bracketName += ' / ' + minAge + ' years';
+        }
+      }
+    }
+
+    itemHtml += '<div class="merge-category" id="' + mergeId + '" style="margin-bottom: 8px; border-left: 4px solid #3b82f6;">';
+    itemHtml += '  <div class="merge-category-content">';
+    itemHtml += '    <div style="cursor: default;">';
+    itemHtml += '      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">';
+    itemHtml += '        <span style="background: #1e40af; color: #dbeafe; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">#' + (idx + 1) + '</span>';
+    itemHtml += '        <span style="font-size: 13px; font-weight: 600; color: #000000;">' + match.opponentName + '</span>';
+
+    if (match.proximityScore !== undefined) {
+      const maxScore = 20;
+      const matchPercentage = Math.max(0, Math.min(100, 100 - (match.proximityScore / maxScore * 100)));
+      const percentColor = matchPercentage >= 75 ? '#10b981' : matchPercentage >= 50 ? '#f59e0b' : '#ef4444';
+      itemHtml += '        <span style="background: #0f172a; color: ' + percentColor + '; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 500;">Match Quality: ' + matchPercentage.toFixed(0) + '%</span>';
+    }
+
+    itemHtml += '        <button onclick="copyAthleteName(\'' + escapedOpponentName + '\');" title="Copy opponent name" style="width: auto; padding: 2px 6px; font-size: 10px; background: transparent; color: #94a3b8; border: 1px solid #cbd5e1; cursor: pointer; border-radius: 3px;">copy name</button>';
+    itemHtml += '      </div>';
+    itemHtml += '      <div style="display: flex; gap: 12px; margin-bottom: 6px; font-size: 11px;">';
+
+    if (match.opponentAge !== null && match.opponentAge !== undefined) {
+      itemHtml += '        <span style="color: #000000;">Age: <strong>' + match.opponentAge.toFixed(1) + ' years</strong></span>';
+      if (match.ageDifference !== undefined && match.ageDifference < 999) {
+        const sign = match.ageDifference >= 0 ? '+' : '';
+        const diffValue = match.ageDifference.toFixed(1);
+        const color = match.ageDifference > 0 ? '#d97706' : '#1e40af';
+        itemHtml += '        <span style="color: ' + color + ';">(Diff: ' + sign + diffValue + ' years)</span>';
+      }
+    }
+
+    if (match.opponentWeight !== null && match.opponentWeight !== undefined) {
+      itemHtml += '        <span style="color: #000000;">Weight: <strong>' + match.opponentWeight.toFixed(1) + ' kg</strong></span>';
+      if (match.weightDifference !== undefined && match.weightDifference < 999) {
+        const sign = match.weightDifference >= 0 ? '+' : '';
+        const diffValue = match.weightDifference.toFixed(1);
+        const color = match.weightDifference > 0 ? '#d97706' : '#1e40af';
+        itemHtml += '        <span style="color: ' + color + ';">(Diff: ' + sign + diffValue + ' kg)</span>';
+      }
+    }
+
+    itemHtml += '      </div>';
+    itemHtml += '      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">';
+    itemHtml += '        <span style="font-size: 11px; color: #000000;">Suggested bracket: <strong style="color: #000000;">' + bracketName + '</strong></span>';
+    const escapedBracketName = bracketName.replace(/'/g, "&apos;");
+    itemHtml += '        <button onclick="copyMergeCategory(\'' + escapedBracketName + '\', \'' + mergeId + '\');" style="display: inline; width: auto; padding: 2px 6px; background: transparent; color: #94a3b8; border: 1px solid #475569; cursor: pointer; font-size: 10px; border-radius: 3px;">copy bracket</button>';
+    itemHtml += '      </div>';
+    itemHtml += '      <div class="merge-type" style="margin-top: 4px;">' + match.type + ' • ' + match.athleteCount + ' athletes in original category</div>';
+
+    if (match.warning) {
+      itemHtml += '      <div style="color: #f59e0b; font-size: 11px; margin-top: 4px; font-weight: 500;">' + match.warning + '</div>';
+    }
+
+    itemHtml += '    </div>';
+    itemHtml += '  </div>';
+    itemHtml += '  <div class="merge-actions">';
+    itemHtml += '    <label style="font-size: 11px; color: #64748b; cursor: pointer; user-select: none; display: inline-flex; align-items: center;">';
+    itemHtml += '      <input type="checkbox" class="merge-checkbox" onchange="toggleMergeComplete(\'' + mergeId + '\', \'' + escapedBracketName + '\')" style="margin-right: 4px; cursor: pointer;"><span style="white-space: nowrap;">Done</span>';
+    itemHtml += '    </label>';
+    itemHtml += '  </div>';
+    itemHtml += '</div>';
+  });
+
+  if (athleteItem.smartMatches.length > 5) {
+    itemHtml += '<div style="font-size: 11px; color: #64748b; margin-top: 8px; font-style: italic;">+' + (athleteItem.smartMatches.length - 5) + ' more opponents available</div>';
+  }
+
+  // Find all the match divs that need to be replaced
+  const existingMatches = smartMatchDiv.querySelectorAll('.merge-category');
+  console.log('Found', existingMatches.length, 'existing match divs to replace');
+
+  // Remove all existing match divs
+  existingMatches.forEach(div => div.remove());
+
+  // Also remove the "more opponents available" message if it exists
+  const moreOpponents = smartMatchDiv.querySelector('[style*="font-style: italic"]');
+  if (moreOpponents) moreOpponents.remove();
+
+  // Find where to insert the new matches (after the "Ranked by..." text)
+  const rankedDiv = smartMatchDiv.querySelector('[style*="margin-bottom: 12px"]');
+  if (rankedDiv) {
+    rankedDiv.insertAdjacentHTML('afterend', itemHtml);
+    console.log('✅ Smart matches updated successfully');
+  } else {
+    console.error('Could not find ranked div to insert matches');
   }
 }
 
